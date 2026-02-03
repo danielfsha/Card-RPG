@@ -73,17 +73,16 @@ export function WalletSwitcher() {
               {publicKey ? `${publicKey.slice(0, 8)}...${publicKey.slice(-4)}` : ''}
             </div>
           </div>
+          {walletType === 'dev' && (
+            <button
+              onClick={handleSwitch}
+              className="switch-button"
+              disabled={isConnecting}
+            >
+              Switch to Player {currentPlayer === 1 ? 2 : 1}
+            </button>
+          )}
         </div>
-
-        {walletType === 'dev' && (
-          <button
-            onClick={handleSwitch}
-            className="switch-button"
-            disabled={isConnecting}
-          >
-            Switch
-          </button>
-        )}
       </div>
     </div>
   );

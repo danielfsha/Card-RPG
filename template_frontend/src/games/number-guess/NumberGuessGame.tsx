@@ -30,7 +30,6 @@ interface NumberGuessGameProps {
   availablePoints: bigint;
   initialXDR?: string | null;
   initialSessionId?: number | null;
-  onBack: () => void;
   onStandingsRefresh: () => void;
   onGameComplete: () => void;
 }
@@ -40,7 +39,6 @@ export function NumberGuessGame({
   availablePoints,
   initialXDR,
   initialSessionId,
-  onBack,
   onStandingsRefresh,
   onGameComplete
 }: NumberGuessGameProps) {
@@ -99,6 +97,37 @@ export function NumberGuessGame({
     } finally {
       actionLock.current = false;
     }
+  };
+
+  const handleStartNewGame = () => {
+    if (gameState?.winner) {
+      onGameComplete();
+    }
+
+    actionLock.current = false;
+    setGamePhase('create');
+    setSessionId(createRandomSessionId());
+    setGameState(null);
+    setGuess(null);
+    setLoading(false);
+    setQuickstartLoading(false);
+    setError(null);
+    setSuccess(null);
+    setCreateMode('create');
+    setExportedAuthEntryXDR(null);
+    setImportAuthEntryXDR('');
+    setImportSessionId('');
+    setImportPlayer1('');
+    setImportPlayer1Points('');
+    setImportPlayer2Points(DEFAULT_POINTS);
+    setLoadSessionId('');
+    setAuthEntryCopied(false);
+    setShareUrlCopied(false);
+    setXdrParsing(false);
+    setXdrParseError(null);
+    setXdrParseSuccess(false);
+    setPlayer1Address(userAddress);
+    setPlayer1Points(DEFAULT_POINTS);
   };
 
   const parsePoints = (value: string): bigint | null => {
@@ -824,7 +853,7 @@ export function NumberGuessGame({
         onStandingsRefresh();
 
         // DON'T call onGameComplete() immediately - let user see the results
-        // User can click "Back to Games" button when ready
+        // User can click "Start New Game" when ready
       } catch (err) {
         console.error('Reveal winner error:', err);
         setError(err instanceof Error ? err.message : 'Failed to reveal winner');
@@ -853,7 +882,7 @@ export function NumberGuessGame({
 
   return (
     <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-8 shadow-xl border-2 border-purple-200">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center mb-6">
         <div>
           <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent">
             Number Guess Game 🎲
@@ -865,18 +894,6 @@ export function NumberGuessGame({
             Session ID: {sessionId}
           </p>
         </div>
-        <button
-          onClick={() => {
-            // If game is complete (has winner), refresh stats before going back
-            if (gameState?.winner) {
-              onGameComplete();
-            }
-            onBack();
-          }}
-          className="px-5 py-3 rounded-xl bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 transition-all text-sm font-bold shadow-md hover:shadow-lg transform hover:scale-105"
-        >
-          ← Back to Games
-        </button>
       </div>
 
       {error && (
@@ -1376,10 +1393,10 @@ export function NumberGuessGame({
             )}
           </div>
           <button
-            onClick={onBack}
+            onClick={handleStartNewGame}
             className="w-full py-4 rounded-xl font-bold text-gray-700 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
           >
-            Back to Games
+            Start New Game
           </button>
         </div>
       )}

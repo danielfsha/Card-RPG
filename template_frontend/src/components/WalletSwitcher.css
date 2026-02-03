@@ -8,14 +8,13 @@
 .wallet-info {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
 }
 
 .wallet-status {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.8rem 0.65rem 1rem;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid var(--color-border);
   border-radius: 999px;
@@ -73,7 +72,7 @@
 }
 
 .wallet-label {
-  font-size: 0.7rem;
+  font-size: 0.46rem;
   font-weight: 600;
   color: var(--color-ink-muted);
   text-transform: uppercase;
@@ -95,19 +94,21 @@
 }
 
 .switch-button {
-  padding: 0.55rem 1.1rem;
+  margin-left: auto;
+  padding: 0.45rem 0.95rem;
   background: var(--color-accent);
   color: var(--color-ink);
   border: 1px solid var(--color-ink);
   border-radius: 999px;
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   cursor: pointer;
   transition: all 0.15s ease;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   white-space: nowrap;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
+  flex-shrink: 0;
 }
 
 .switch-button:hover {
@@ -153,15 +154,14 @@
 
   .wallet-info {
     flex-direction: column;
-    gap: 0.5rem;
   }
 
   .wallet-status {
     width: 100%;
-    justify-content: center;
+    justify-content: space-between;
   }
 
   .switch-button {
-    width: 100%;
+    width: auto;
   }
 }
