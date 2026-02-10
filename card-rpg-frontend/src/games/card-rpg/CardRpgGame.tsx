@@ -54,6 +54,7 @@ export function CardRpgGame({
     setMyAddress,
     players,
     startGame,
+    resetGame,
     p1AuthEntryXDR,
     setP1AuthEntryXDR,
   } = useGameEngine();
@@ -193,11 +194,14 @@ export function CardRpgGame({
 
     actionLock.current = false;
     setGamePhase("create");
+    // Trigger reset for both players
+    resetGame();
+    // (Guest might not trigger new ID generation locally but will see sessionId -> 0 -> wait for Host)
     if (isHost) {
+      // Host will see 0 and trigger startGame() via useEffect or we can do it here explicitly
       startGame();
-    } else {
-      setSessionId(createRandomSessionId());
     }
+
     setGameState(null);
     setGuess(null);
     setLoading(false);
@@ -239,11 +243,16 @@ export function CardRpgGame({
   const loadGameState = async () => {
     try {
       // Always fetch latest game state to avoid stale cached results after transactions.
+      console.log(`[loadGameState] Fetching game ${sessionId}...`);
       const game = await cardRpgService.getGame(sessionId);
+      console.log(`[loadGameState] Result:`, game);
       setGameState(game);
 
       // Determine game phase based on state
       if (game && game.winner !== null && game.winner !== undefined) {
+        console.log(
+          `[loadGameState] Winner detected: ${game.winner} -> Complete`,
+        );
         setGamePhase("complete");
       } else if (
         game &&
@@ -252,8 +261,10 @@ export function CardRpgGame({
         game.player2_guess !== null &&
         game.player2_guess !== undefined
       ) {
+        console.log(`[loadGameState] Both guessed -> Reveal`);
         setGamePhase("reveal");
       } else {
+        console.log(`[loadGameState] No winner, incomplete guesses -> Guess`);
         setGamePhase("guess");
       }
     } catch (err) {

@@ -14,6 +14,7 @@ interface GameEngineContextType {
   myPlayer: any;
   setMyAddress: (address: string) => void;
   startGame: () => void;
+  resetGame: () => void;
   p1AuthEntryXDR: string;
   setP1AuthEntryXDR: (xdr: string) => void;
 }
@@ -62,6 +63,11 @@ export const GameEngineProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const resetGame = () => {
+    setSessionId(0, true);
+    setP1AuthEntryXDR("");
+  };
+
   useEffect(() => {
     if (isHost() && sessionId === 0) {
       startGame();
@@ -80,6 +86,7 @@ export const GameEngineProvider: React.FC<{ children: React.ReactNode }> = ({
         myPlayer,
         setMyAddress,
         startGame,
+        resetGame,
         p1AuthEntryXDR,
         setP1AuthEntryXDR,
       }}
