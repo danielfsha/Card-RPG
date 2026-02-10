@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { insertCoin } from "playroomkit";
+import { useState, useEffect } from "react";
+import { insertCoin, isStreamScreen } from "playroomkit";
 import { config } from "./config";
 import { Layout } from "./components/Layout";
 import { useWallet } from "./hooks/useWallet";
@@ -21,6 +21,16 @@ export default function App() {
 
   const [gameMode, setGameMode] = useState<"single" | "multi" | null>(null);
   const [playroomLoading, setPlayroomLoading] = useState(false);
+  const [initRoomCode, setInitRoomCode] = useState<string | null>(null);
+
+  // Check for room code in URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomCode = params.get("room") || params.get("r");
+    if (roomCode) {
+        setInitRoomCode(roomCode);
+    }
+  }, []);
 
   const handleStartGame = async (mode: "single" | "multi") => {
     setPlayroomLoading(true);
@@ -29,14 +39,15 @@ export default function App() {
         // Initialize Playroom with Lobby
         await insertCoin({
           streamMode: false,
-          skipLobby: false, // Show Lobby for inviting friends
+          skipLobby: false,
+          // If we have a room code, Playroom automatically handles it via URL
         });
       } else {
-        // Initialize Playroom in solo mode (no lobby)
+        // Initialize Playroom in solo mode
         await insertCoin({
           streamMode: false,
-          skipLobby: true,
-          reconnect: false,
+          skipLobby: true, 
+          reconnect: false // Don't reconnect to previous session
         });
       }
       setGameMode(mode);
@@ -46,6 +57,14 @@ export default function App() {
       setPlayroomLoading(false);
     }
   };
+
+  // Auto-join if room code exists and wallet is ready
+  useEffect(() => {
+      if (initRoomCode && isConnected && !gameMode && !playroomLoading && !isConnecting) {
+          console.log("Auto-joining game with room:", initRoomCode);
+          handleStartGame('multi');
+      }
+  }, [initRoomCode, isConnected, gameMode, playroomLoading, isConnecting]);
 
   return (
     <Layout title={GAME_TITLE} subtitle={GAME_TAGLINE}>
