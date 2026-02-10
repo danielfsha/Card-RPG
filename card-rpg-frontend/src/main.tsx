@@ -6,7 +6,8 @@ import App from "./App";
 import "./index.css";
 
 insertCoin({
-  streamMode: true, // Optional: Enable if you want to support stream mode (e.g. for OBS)
+  streamMode: false, // Disable stream mode to allow symmetric multiplayer (each peer is a player)
+  skipLobby: true, // Optional: Skip lobby for faster dev, but usually you want lobby to invite friends
 }).then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
