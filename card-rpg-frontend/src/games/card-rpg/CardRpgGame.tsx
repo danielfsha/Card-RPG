@@ -1,14 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { CardRpgService } from './cardRpgService';
-import { requestCache, createCacheKey } from '@/utils/requestCache';
-import { useWallet } from '@/hooks/useWallet';
-import { CARD_RPG_CONTRACT } from '@/utils/constants';
-import { getFundedSimulationSourceAddress } from '@/utils/simulationUtils';
-import { devWalletService, DevWalletService } from '@/services/devWalletService';
-import type { Game } from './bindings';
+import { useState, useEffect, useRef } from "react";
+import { CardRpgService } from "./cardRpgService";
+import { requestCache, createCacheKey } from "@/utils/requestCache";
+import { useWallet } from "@/hooks/useWallet";
+import { useGameEngine } from "@/hooks/useGameEngine"; // Import the game engine hook
+import { CARD_RPG_CONTRACT } from "@/utils/constants";
+import { getFundedSimulationSourceAddress } from "@/utils/simulationUtils";
+import {
+  devWalletService,
+  DevWalletService,
+} from "@/services/devWalletService";
+import type { Game } from "./bindings";
 
 const createRandomSessionId = (): number => {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
     let value = 0;
     const buffer = new Uint32Array(1);
     while (value === 0) {
@@ -17,11 +21,9 @@ const createRandomSessionId = (): number => {
     }
     return value;
   }
-
-  return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+  return Math.floor(Math.random() * 0xffffffff) >>> 0 || 1;
 };
 
-// Create service instance with the contract ID
 const cardRpgService = new CardRpgService(CARD_RPG_CONTRACT);
 
 interface CardRpgGameProps {
@@ -40,13 +42,39 @@ export function CardRpgGame({
   initialXDR,
   initialSessionId,
   onStandingsRefresh,
-  onGameComplete
+  onGameComplete,
 }: CardRpgGameProps) {
-  const DEFAULT_POINTS = '0.1';
+  const DEFAULT_POINTS = "0.1";
   const { getContractSigner, walletType } = useWallet();
-  // Use a random session ID that fits in u32 (avoid 0 because UI validation treats <=0 as invalid)
-  const [sessionId, setSessionId] = useState<number>(() => createRandomSessionId());
-  const [player1Address, setPlayer1Address] = useState(userAddress);
+
+  // Use Game Engine for multiplayer state
+  const {
+    sessionId: sharedSessionId,
+    isHost,
+    setMyAddress,
+    players,
+    startGame,
+    p1AuthEntryXDR,
+    setP1AuthEntryXDR,
+  } = useGameEngine();
+
+  // Use local sessionId for fallback or allow shared to override
+  const [localSessionId, setLocalSessionId] = useState<number>(0);
+
+  // Effective session ID is shared if available, otherwise fallback (mostly for transitions)
+  const sessionId = sharedSessionId || localSessionId;
+
+  const setSessionId = (id: number) => {
+    setLocalSessionId(id);
+  };
+
+  const [player1Address, setPlayer1Address] = useState(
+    isHost ? userAddress : "",
+  );
+  const [player2Address, setPlayer2Address] = useState(
+    !isHost ? userAddress : "",
+  );
+
   const [player1Points, setPlayer1Points] = useState(DEFAULT_POINTS);
   const [guess, setGuess] = useState<number | null>(null);
   const [gameState, setGameState] = useState<Game | null>(null);
@@ -54,27 +82,85 @@ export function CardRpgGame({
   const [quickstartLoading, setQuickstartLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [gamePhase, setGamePhase] = useState<'create' | 'guess' | 'reveal' | 'complete'>('create');
-  const [createMode, setCreateMode] = useState<'create' | 'import' | 'load'>('create');
-  const [exportedAuthEntryXDR, setExportedAuthEntryXDR] = useState<string | null>(null);
-  const [importAuthEntryXDR, setImportAuthEntryXDR] = useState('');
-  const [importSessionId, setImportSessionId] = useState('');
-  const [importPlayer1, setImportPlayer1] = useState('');
-  const [importPlayer1Points, setImportPlayer1Points] = useState('');
-  const [importPlayer2Points, setImportPlayer2Points] = useState(DEFAULT_POINTS);
-  const [loadSessionId, setLoadSessionId] = useState('');
+  const [gamePhase, setGamePhase] = useState<
+    "create" | "guess" | "reveal" | "complete"
+  >("create");
+  const [createMode, setCreateMode] = useState<"create" | "import" | "load">(
+    "create",
+  );
+  const [exportedAuthEntryXDR, setExportedAuthEntryXDR] = useState<
+    string | null
+  >(null);
+  const [importAuthEntryXDR, setImportAuthEntryXDR] = useState("");
+  const [importSessionId, setImportSessionId] = useState("");
+  const [importPlayer1, setImportPlayer1] = useState("");
+  const [importPlayer1Points, setImportPlayer1Points] = useState("");
+  const [importPlayer2Points, setImportPlayer2Points] =
+    useState(DEFAULT_POINTS);
+  const [loadSessionId, setLoadSessionId] = useState("");
   const [authEntryCopied, setAuthEntryCopied] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [xdrParsing, setXdrParsing] = useState(false);
   const [xdrParseError, setXdrParseError] = useState<string | null>(null);
   const [xdrParseSuccess, setXdrParseSuccess] = useState(false);
 
+  // Sync user address to Playroom
   useEffect(() => {
-    setPlayer1Address(userAddress);
-  }, [userAddress]);
+    if (userAddress) {
+      setMyAddress(userAddress);
+    }
+  }, [userAddress, setMyAddress]);
+
+  // Sync players from Playroom
+  useEffect(() => {
+    // players is an array of Playroom player states
+    // We iterate to find P1 and P2 based on who is host
+    // Assumption: Host is Player 1
+    const p1 = players.find((p) => p.id === players[0]?.id); // Simplistic: first player is host?
+    // Actually Playroom doesn't guarantee order, but host usually joins first or we check p.isHost?
+    // Let's use isHost logic locally first.
+
+    // Better logic:
+    // If I am Host, I am P1. My address is P1 address. The other player is P2.
+    // If I am Guest, I am P2. My address is P2 address. The other player is P1.
+
+    // However, we need the *addresses* of the other players.
+    // players[i].getState('address')
+
+    // Let's iterate all players
+    let p1Addr = "";
+    let p2Addr = "";
+
+    // We need to know which playroom player is P1.
+    // In Playroom, we can verify if a player object corresponds to "me".
+    // A stable way is: Sort by ID. First ID is P1 (Host), Second is P2.
+    // The reference game does: `players.sort((a, b) => a.id.localeCompare(b.id));`
+
+    const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
+    if (sortedPlayers.length > 0) {
+      p1Addr = sortedPlayers[0].getState("address") || "";
+    }
+    if (sortedPlayers.length > 1) {
+      p2Addr = sortedPlayers[1].getState("address") || "";
+    }
+
+    setPlayer1Address(p1Addr);
+    setPlayer2Address(p2Addr);
+  }, [players, userAddress]);
+
+  // Playroom: Auto-import auth entry for Guest
+  useEffect(() => {
+    if (!isHost && p1AuthEntryXDR && gamePhase === "create") {
+      console.log(
+        "Received P1 Auth Entry from Playroom, switching to import mode",
+      );
+      setImportAuthEntryXDR(p1AuthEntryXDR);
+      setCreateMode("import");
+    }
+  }, [isHost, p1AuthEntryXDR, gamePhase]);
 
   useEffect(() => {
-    if (createMode === 'import' && !importPlayer2Points.trim()) {
+    if (createMode === "import" && !importPlayer2Points.trim()) {
       setImportPlayer2Points(DEFAULT_POINTS);
     }
   }, [createMode, importPlayer2Points]);
@@ -82,10 +168,11 @@ export function CardRpgGame({
   const POINTS_DECIMALS = 7;
   const isBusy = loading || quickstartLoading;
   const actionLock = useRef(false);
-  const quickstartAvailable = walletType === 'dev'
-    && DevWalletService.isDevModeAvailable()
-    && DevWalletService.isPlayerAvailable(1)
-    && DevWalletService.isPlayerAvailable(2);
+  const quickstartAvailable =
+    walletType === "dev" &&
+    DevWalletService.isDevModeAvailable() &&
+    DevWalletService.isPlayerAvailable(1) &&
+    DevWalletService.isPlayerAvailable(2);
 
   const runAction = async (action: () => Promise<void>) => {
     if (actionLock.current || isBusy) {
@@ -105,22 +192,26 @@ export function CardRpgGame({
     }
 
     actionLock.current = false;
-    setGamePhase('create');
-    setSessionId(createRandomSessionId());
+    setGamePhase("create");
+    if (isHost) {
+      startGame();
+    } else {
+      setSessionId(createRandomSessionId());
+    }
     setGameState(null);
     setGuess(null);
     setLoading(false);
     setQuickstartLoading(false);
     setError(null);
     setSuccess(null);
-    setCreateMode('create');
+    setCreateMode("create");
     setExportedAuthEntryXDR(null);
-    setImportAuthEntryXDR('');
-    setImportSessionId('');
-    setImportPlayer1('');
-    setImportPlayer1Points('');
+    setImportAuthEntryXDR("");
+    setImportSessionId("");
+    setImportPlayer1("");
+    setImportPlayer1Points("");
     setImportPlayer2Points(DEFAULT_POINTS);
-    setLoadSessionId('');
+    setLoadSessionId("");
     setAuthEntryCopied(false);
     setShareUrlCopied(false);
     setXdrParsing(false);
@@ -132,11 +223,13 @@ export function CardRpgGame({
 
   const parsePoints = (value: string): bigint | null => {
     try {
-      const cleaned = value.replace(/[^\d.]/g, '');
-      if (!cleaned || cleaned === '.') return null;
+      const cleaned = value.replace(/[^\d.]/g, "");
+      if (!cleaned || cleaned === ".") return null;
 
-      const [whole = '0', fraction = ''] = cleaned.split('.');
-      const paddedFraction = fraction.padEnd(POINTS_DECIMALS, '0').slice(0, POINTS_DECIMALS);
+      const [whole = "0", fraction = ""] = cleaned.split(".");
+      const paddedFraction = fraction
+        .padEnd(POINTS_DECIMALS, "0")
+        .slice(0, POINTS_DECIMALS);
       return BigInt(whole + paddedFraction);
     } catch {
       return null;
@@ -151,12 +244,17 @@ export function CardRpgGame({
 
       // Determine game phase based on state
       if (game && game.winner !== null && game.winner !== undefined) {
-        setGamePhase('complete');
-      } else if (game && game.player1_guess !== null && game.player1_guess !== undefined &&
-                 game.player2_guess !== null && game.player2_guess !== undefined) {
-        setGamePhase('reveal');
+        setGamePhase("complete");
+      } else if (
+        game &&
+        game.player1_guess !== null &&
+        game.player1_guess !== undefined &&
+        game.player2_guess !== null &&
+        game.player2_guess !== undefined
+      ) {
+        setGamePhase("reveal");
       } else {
-        setGamePhase('guess');
+        setGamePhase("guess");
       }
     } catch (err) {
       // Game doesn't exist yet
@@ -165,7 +263,7 @@ export function CardRpgGame({
   };
 
   useEffect(() => {
-    if (gamePhase !== 'create') {
+    if (gamePhase !== "create") {
       loadGameState();
       const interval = setInterval(loadGameState, 5000); // Poll every 5 seconds
       return () => clearInterval(interval);
@@ -174,8 +272,8 @@ export function CardRpgGame({
 
   // Auto-refresh standings when game completes (for passive player who didn't call reveal_winner)
   useEffect(() => {
-    if (gamePhase === 'complete' && gameState?.winner) {
-      console.log('Game completed! Refreshing standings and dashboard data...');
+    if (gamePhase === "complete" && gameState?.winner) {
+      console.log("Game completed! Refreshing standings and dashboard data...");
       onStandingsRefresh(); // Refresh standings and available points; don't call onGameComplete() here or it will close the game!
     }
   }, [gamePhase, gameState?.winner]);
@@ -188,130 +286,162 @@ export function CardRpgGame({
   useEffect(() => {
     // Priority 1: Check initialXDR prop (from GamesCatalog after URL cleanup)
     if (initialXDR) {
-      console.log('[Deep Link] Using initialXDR prop from GamesCatalog');
+      console.log("[Deep Link] Using initialXDR prop from GamesCatalog");
 
       try {
         const parsed = cardRpgService.parseAuthEntry(initialXDR);
         const sessionId = parsed.sessionId;
 
-        console.log('[Deep Link] Parsed session ID from initialXDR:', sessionId);
+        console.log(
+          "[Deep Link] Parsed session ID from initialXDR:",
+          sessionId,
+        );
 
         // Check if game already exists (both players have signed)
-        cardRpgService.getGame(sessionId)
+        cardRpgService
+          .getGame(sessionId)
           .then((game) => {
             if (game) {
               // Game exists! Load it directly instead of going to import mode
-              console.log('[Deep Link] Game already exists, loading directly to guess phase');
-              console.log('[Deep Link] Game data:', game);
+              console.log(
+                "[Deep Link] Game already exists, loading directly to guess phase",
+              );
+              console.log("[Deep Link] Game data:", game);
 
               // Auto-load the game - bypass create phase entirely
               setGameState(game);
-              setGamePhase('guess');
+              setGamePhase("guess");
               setSessionId(sessionId); // Set session ID for the game
             } else {
               // Game doesn't exist yet, go to import mode
-              console.log('[Deep Link] Game not found, entering import mode');
-              setCreateMode('import');
+              console.log("[Deep Link] Game not found, entering import mode");
+              setCreateMode("import");
               setImportAuthEntryXDR(initialXDR);
               setImportSessionId(sessionId.toString());
               setImportPlayer1(parsed.player1);
-              setImportPlayer1Points((Number(parsed.player1Points) / 10_000_000).toString());
-              setImportPlayer2Points('0.1');
+              setImportPlayer1Points(
+                (Number(parsed.player1Points) / 10_000_000).toString(),
+              );
+              setImportPlayer2Points("0.1");
             }
           })
           .catch((err) => {
-            console.error('[Deep Link] Error checking game existence:', err);
-            console.error('[Deep Link] Error details:', {
+            console.error("[Deep Link] Error checking game existence:", err);
+            console.error("[Deep Link] Error details:", {
               message: err?.message,
               stack: err?.stack,
               sessionId: sessionId,
             });
             // If we can't check, default to import mode
-            setCreateMode('import');
+            setCreateMode("import");
             setImportAuthEntryXDR(initialXDR);
             setImportSessionId(parsed.sessionId.toString());
             setImportPlayer1(parsed.player1);
-            setImportPlayer1Points((Number(parsed.player1Points) / 10_000_000).toString());
-            setImportPlayer2Points('0.1');
+            setImportPlayer1Points(
+              (Number(parsed.player1Points) / 10_000_000).toString(),
+            );
+            setImportPlayer2Points("0.1");
           });
       } catch (err) {
-        console.log('[Deep Link] Failed to parse initialXDR, will retry on import');
-        setCreateMode('import');
+        console.log(
+          "[Deep Link] Failed to parse initialXDR, will retry on import",
+        );
+        setCreateMode("import");
         setImportAuthEntryXDR(initialXDR);
-        setImportPlayer2Points('0.1');
+        setImportPlayer2Points("0.1");
       }
       return; // Exit early - we processed initialXDR
     }
 
     // Priority 2: Check URL parameters (for direct navigation without GamesCatalog)
     const urlParams = new URLSearchParams(window.location.search);
-    const authEntry = urlParams.get('auth');
-    const urlSessionId = urlParams.get('session-id');
+    const authEntry = urlParams.get("auth");
+    const urlSessionId = urlParams.get("session-id");
 
     if (authEntry) {
       // Simplified URL format - only auth entry is needed
       // Session ID, Player 1 address, and points are parsed from auth entry
-      console.log('[Deep Link] Auto-populating game from URL with auth entry');
+      console.log("[Deep Link] Auto-populating game from URL with auth entry");
 
       // Try to parse auth entry to get session ID
       try {
         const parsed = cardRpgService.parseAuthEntry(authEntry);
         const sessionId = parsed.sessionId;
 
-        console.log('[Deep Link] Parsed session ID from URL auth entry:', sessionId);
+        console.log(
+          "[Deep Link] Parsed session ID from URL auth entry:",
+          sessionId,
+        );
 
         // Check if game already exists (both players have signed)
-        cardRpgService.getGame(sessionId)
+        cardRpgService
+          .getGame(sessionId)
           .then((game) => {
             if (game) {
               // Game exists! Load it directly instead of going to import mode
-              console.log('[Deep Link] Game already exists (URL), loading directly to guess phase');
-              console.log('[Deep Link] Game data:', game);
+              console.log(
+                "[Deep Link] Game already exists (URL), loading directly to guess phase",
+              );
+              console.log("[Deep Link] Game data:", game);
 
               // Auto-load the game - bypass create phase entirely
               setGameState(game);
-              setGamePhase('guess');
+              setGamePhase("guess");
               setSessionId(sessionId); // Set session ID for the game
             } else {
               // Game doesn't exist yet, go to import mode
-              console.log('[Deep Link] Game not found (URL), entering import mode');
-              setCreateMode('import');
+              console.log(
+                "[Deep Link] Game not found (URL), entering import mode",
+              );
+              setCreateMode("import");
               setImportAuthEntryXDR(authEntry);
               setImportSessionId(sessionId.toString());
               setImportPlayer1(parsed.player1);
-              setImportPlayer1Points((Number(parsed.player1Points) / 10_000_000).toString());
-              setImportPlayer2Points('0.1');
+              setImportPlayer1Points(
+                (Number(parsed.player1Points) / 10_000_000).toString(),
+              );
+              setImportPlayer2Points("0.1");
             }
           })
           .catch((err) => {
-            console.error('[Deep Link] Error checking game existence (URL):', err);
-            console.error('[Deep Link] Error details:', {
+            console.error(
+              "[Deep Link] Error checking game existence (URL):",
+              err,
+            );
+            console.error("[Deep Link] Error details:", {
               message: err?.message,
               stack: err?.stack,
               sessionId: sessionId,
             });
             // If we can't check, default to import mode
-            setCreateMode('import');
+            setCreateMode("import");
             setImportAuthEntryXDR(authEntry);
             setImportSessionId(parsed.sessionId.toString());
             setImportPlayer1(parsed.player1);
-            setImportPlayer1Points((Number(parsed.player1Points) / 10_000_000).toString());
-            setImportPlayer2Points('0.1');
+            setImportPlayer1Points(
+              (Number(parsed.player1Points) / 10_000_000).toString(),
+            );
+            setImportPlayer2Points("0.1");
           });
       } catch (err) {
-        console.log('[Deep Link] Failed to parse auth entry from URL, will retry on import');
-        setCreateMode('import');
+        console.log(
+          "[Deep Link] Failed to parse auth entry from URL, will retry on import",
+        );
+        setCreateMode("import");
         setImportAuthEntryXDR(authEntry);
-        setImportPlayer2Points('0.1');
+        setImportPlayer2Points("0.1");
       }
     } else if (urlSessionId) {
       // Load existing game by session ID
-      console.log('[Deep Link] Auto-populating game from URL with session ID');
-      setCreateMode('load');
+      console.log("[Deep Link] Auto-populating game from URL with session ID");
+      setCreateMode("load");
       setLoadSessionId(urlSessionId);
     } else if (initialSessionId !== null && initialSessionId !== undefined) {
-      console.log('[Deep Link] Auto-populating session ID from prop:', initialSessionId);
-      setCreateMode('load');
+      console.log(
+        "[Deep Link] Auto-populating session ID from prop:",
+        initialSessionId,
+      );
+      setCreateMode("load");
       setLoadSessionId(initialSessionId.toString());
     }
   }, [initialXDR, initialSessionId]);
@@ -319,15 +449,15 @@ export function CardRpgGame({
   // Auto-parse Auth Entry XDR when pasted
   useEffect(() => {
     // Only parse if in import mode and XDR is not empty
-    if (createMode !== 'import' || !importAuthEntryXDR.trim()) {
+    if (createMode !== "import" || !importAuthEntryXDR.trim()) {
       // Reset parse states when XDR is cleared
       if (!importAuthEntryXDR.trim()) {
         setXdrParsing(false);
         setXdrParseError(null);
         setXdrParseSuccess(false);
-        setImportSessionId('');
-        setImportPlayer1('');
-        setImportPlayer1Points('');
+        setImportSessionId("");
+        setImportPlayer1("");
+        setImportPlayer1Points("");
       }
       return;
     }
@@ -339,32 +469,41 @@ export function CardRpgGame({
       setXdrParseSuccess(false);
 
       try {
-        console.log('[Auto-Parse] Parsing auth entry XDR...');
-        const gameParams = cardRpgService.parseAuthEntry(importAuthEntryXDR.trim());
+        console.log("[Auto-Parse] Parsing auth entry XDR...");
+        const gameParams = cardRpgService.parseAuthEntry(
+          importAuthEntryXDR.trim(),
+        );
 
         // Check if user is trying to import their own auth entry (self-play prevention)
         if (gameParams.player1 === userAddress) {
-          throw new Error('You cannot play against yourself. This auth entry was created by you (Player 1).');
+          throw new Error(
+            "You cannot play against yourself. This auth entry was created by you (Player 1).",
+          );
         }
 
         // Successfully parsed - auto-fill fields
         setImportSessionId(gameParams.sessionId.toString());
         setImportPlayer1(gameParams.player1);
-        setImportPlayer1Points((Number(gameParams.player1Points) / 10_000_000).toString());
+        setImportPlayer1Points(
+          (Number(gameParams.player1Points) / 10_000_000).toString(),
+        );
         setXdrParseSuccess(true);
-        console.log('[Auto-Parse] Successfully parsed auth entry:', {
+        console.log("[Auto-Parse] Successfully parsed auth entry:", {
           sessionId: gameParams.sessionId,
           player1: gameParams.player1,
-          player1Points: (Number(gameParams.player1Points) / 10_000_000).toString(),
+          player1Points: (
+            Number(gameParams.player1Points) / 10_000_000
+          ).toString(),
         });
       } catch (err) {
-        console.error('[Auto-Parse] Failed to parse auth entry:', err);
-        const errorMsg = err instanceof Error ? err.message : 'Invalid auth entry XDR';
+        console.error("[Auto-Parse] Failed to parse auth entry:", err);
+        const errorMsg =
+          err instanceof Error ? err.message : "Invalid auth entry XDR";
         setXdrParseError(errorMsg);
         // Clear auto-filled fields on error
-        setImportSessionId('');
-        setImportPlayer1('');
-        setImportPlayer1Points('');
+        setImportSessionId("");
+        setImportPlayer1("");
+        setImportPlayer1Points("");
       } finally {
         setXdrParsing(false);
       }
@@ -385,30 +524,39 @@ export function CardRpgGame({
         const p1Points = parsePoints(player1Points);
 
         if (!p1Points || p1Points <= 0n) {
-          throw new Error('Enter a valid points amount');
+          throw new Error("Enter a valid points amount");
         }
 
         const signer = getContractSigner();
 
         // Use placeholder values for Player 2 (they'll rebuild with their own values).
         // We still need a real, funded account as the transaction source for build/simulation.
-        const placeholderPlayer2Address = await getFundedSimulationSourceAddress([player1Address, userAddress]);
+        const placeholderPlayer2Address =
+          await getFundedSimulationSourceAddress([player1Address, userAddress]);
         const placeholderP2Points = p1Points; // Same as P1 for simulation
 
-        console.log('Preparing transaction for Player 1 to sign...');
-        console.log('Using placeholder Player 2 values for simulation only');
+        console.log("Preparing transaction for Player 1 to sign...");
+        console.log("Using placeholder Player 2 values for simulation only");
         const authEntryXDR = await cardRpgService.prepareStartGame(
           sessionId,
           player1Address,
           placeholderPlayer2Address,
           p1Points,
           placeholderP2Points,
-          signer
+          signer,
         );
 
-        console.log('Transaction prepared successfully! Player 1 has signed their auth entry.');
+        console.log(
+          "Transaction prepared successfully! Player 1 has signed their auth entry.",
+        );
         setExportedAuthEntryXDR(authEntryXDR);
-        setSuccess('Auth entry signed! Copy the auth entry XDR or share URL below and send it to Player 2. Waiting for them to sign...');
+        // Share via Playroom
+        if (setP1AuthEntryXDR) {
+          setP1AuthEntryXDR(authEntryXDR);
+        }
+        setSuccess(
+          "Auth entry signed! Shared via Playroom. Waiting for Player 2 to sign...",
+        );
 
         // Start polling for the game to be created by Player 2
         const pollInterval = setInterval(async () => {
@@ -416,14 +564,16 @@ export function CardRpgGame({
             // Try to load the game
             const game = await cardRpgService.getGame(sessionId);
             if (game) {
-              console.log('Game found! Player 2 has finalized the transaction. Transitioning to guess phase...');
+              console.log(
+                "Game found! Player 2 has finalized the transaction. Transitioning to guess phase...",
+              );
               clearInterval(pollInterval);
 
               // Update game state
               setGameState(game);
               setExportedAuthEntryXDR(null);
-              setSuccess('Game created! Player 2 has signed and submitted.');
-              setGamePhase('guess');
+              setSuccess("Game created! Player 2 has signed and submitted.");
+              setGamePhase("guess");
 
               // Refresh dashboard to show updated available points (locked in game)
               onStandingsRefresh();
@@ -431,30 +581,33 @@ export function CardRpgGame({
               // Clear success message after 2 seconds
               setTimeout(() => setSuccess(null), 2000);
             } else {
-              console.log('Game not found yet, continuing to poll...');
+              console.log("Game not found yet, continuing to poll...");
             }
           } catch (err) {
             // Game doesn't exist yet, keep polling
-            console.log('Polling for game creation...', err instanceof Error ? err.message : 'checking');
+            console.log(
+              "Polling for game creation...",
+              err instanceof Error ? err.message : "checking",
+            );
           }
         }, 3000); // Poll every 3 seconds
 
         // Stop polling after 5 minutes
         setTimeout(() => {
           clearInterval(pollInterval);
-          console.log('Stopped polling after 5 minutes');
+          console.log("Stopped polling after 5 minutes");
         }, 300000);
       } catch (err) {
-        console.error('Prepare transaction error:', err);
+        console.error("Prepare transaction error:", err);
         // Extract detailed error message
-        let errorMessage = 'Failed to prepare transaction';
+        let errorMessage = "Failed to prepare transaction";
         if (err instanceof Error) {
           errorMessage = err.message;
 
           // Check for common errors
-          if (err.message.includes('insufficient')) {
+          if (err.message.includes("insufficient")) {
             errorMessage = `Insufficient points: ${err.message}. Make sure you have enough points for this game.`;
-          } else if (err.message.includes('auth')) {
+          } else if (err.message.includes("auth")) {
             errorMessage = `Authorization failed: ${err.message}. Check your wallet connection.`;
           }
         }
@@ -474,24 +627,36 @@ export function CardRpgGame({
         setQuickstartLoading(true);
         setError(null);
         setSuccess(null);
-        if (walletType !== 'dev') {
-          throw new Error('Quickstart only works with dev wallets in the Games Library.');
+        if (walletType !== "dev") {
+          throw new Error(
+            "Quickstart only works with dev wallets in the Games Library.",
+          );
         }
 
-        if (!DevWalletService.isDevModeAvailable() || !DevWalletService.isPlayerAvailable(1) || !DevWalletService.isPlayerAvailable(2)) {
-          throw new Error('Quickstart requires both dev wallets. Run "bun run setup" and connect a dev wallet.');
+        if (
+          !DevWalletService.isDevModeAvailable() ||
+          !DevWalletService.isPlayerAvailable(1) ||
+          !DevWalletService.isPlayerAvailable(2)
+        ) {
+          throw new Error(
+            'Quickstart requires both dev wallets. Run "bun run setup" and connect a dev wallet.',
+          );
         }
 
         const p1Points = parsePoints(player1Points);
         if (!p1Points || p1Points <= 0n) {
-          throw new Error('Enter a valid points amount');
+          throw new Error("Enter a valid points amount");
         }
 
         const originalPlayer = devWalletService.getCurrentPlayer();
-        let player1AddressQuickstart = '';
-        let player2AddressQuickstart = '';
-        let player1Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
-        let player2Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
+        let player1AddressQuickstart = "";
+        let player2AddressQuickstart = "";
+        let player1Signer: ReturnType<
+          typeof devWalletService.getSigner
+        > | null = null;
+        let player2Signer: ReturnType<
+          typeof devWalletService.getSigner
+        > | null = null;
 
         try {
           await devWalletService.initPlayer(1);
@@ -508,29 +673,32 @@ export function CardRpgGame({
         }
 
         if (!player1Signer || !player2Signer) {
-          throw new Error('Quickstart failed to initialize dev wallet signers.');
+          throw new Error(
+            "Quickstart failed to initialize dev wallet signers.",
+          );
         }
 
         if (player1AddressQuickstart === player2AddressQuickstart) {
-          throw new Error('Quickstart requires two different dev wallets.');
+          throw new Error("Quickstart requires two different dev wallets.");
         }
 
         const quickstartSessionId = createRandomSessionId();
         setSessionId(quickstartSessionId);
         setPlayer1Address(player1AddressQuickstart);
-        setCreateMode('create');
+        setCreateMode("create");
         setExportedAuthEntryXDR(null);
-        setImportAuthEntryXDR('');
-        setImportSessionId('');
-        setImportPlayer1('');
-        setImportPlayer1Points('');
+        setImportAuthEntryXDR("");
+        setImportSessionId("");
+        setImportPlayer1("");
+        setImportPlayer1Points("");
         setImportPlayer2Points(DEFAULT_POINTS);
-        setLoadSessionId('');
+        setLoadSessionId("");
 
-        const placeholderPlayer2Address = await getFundedSimulationSourceAddress([
-          player1AddressQuickstart,
-          player2AddressQuickstart,
-        ]);
+        const placeholderPlayer2Address =
+          await getFundedSimulationSourceAddress([
+            player1AddressQuickstart,
+            player2AddressQuickstart,
+          ]);
 
         const authEntryXDR = await cardRpgService.prepareStartGame(
           quickstartSessionId,
@@ -538,35 +706,37 @@ export function CardRpgGame({
           placeholderPlayer2Address,
           p1Points,
           p1Points,
-          player1Signer
+          player1Signer,
         );
 
         const fullySignedTxXDR = await cardRpgService.importAndSignAuthEntry(
           authEntryXDR,
           player2AddressQuickstart,
           p1Points,
-          player2Signer
+          player2Signer,
         );
 
         await cardRpgService.finalizeStartGame(
           fullySignedTxXDR,
           player2AddressQuickstart,
-          player2Signer
+          player2Signer,
         );
 
         try {
           const game = await cardRpgService.getGame(quickstartSessionId);
           setGameState(game);
         } catch (err) {
-          console.log('Quickstart game not available yet:', err);
+          console.log("Quickstart game not available yet:", err);
         }
-        setGamePhase('guess');
+        setGamePhase("guess");
         onStandingsRefresh();
-        setSuccess('Quickstart complete! Both players signed and the game is ready.');
+        setSuccess(
+          "Quickstart complete! Both players signed and the game is ready.",
+        );
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
-        console.error('Quickstart error:', err);
-        setError(err instanceof Error ? err.message : 'Quickstart failed');
+        console.error("Quickstart error:", err);
+        setError(err instanceof Error ? err.message : "Quickstart failed");
       } finally {
         setQuickstartLoading(false);
       }
@@ -581,24 +751,26 @@ export function CardRpgGame({
         setSuccess(null);
         // Validate required inputs (only auth entry and player 2 points)
         if (!importAuthEntryXDR.trim()) {
-          throw new Error('Enter auth entry XDR from Player 1');
+          throw new Error("Enter auth entry XDR from Player 1");
         }
         if (!importPlayer2Points.trim()) {
-          throw new Error('Enter your points amount (Player 2)');
+          throw new Error("Enter your points amount (Player 2)");
         }
 
         // Parse Player 2's points
         const p2Points = parsePoints(importPlayer2Points);
         if (!p2Points || p2Points <= 0n) {
-          throw new Error('Invalid Player 2 points');
+          throw new Error("Invalid Player 2 points");
         }
 
         // Parse auth entry to extract game parameters
         // The auth entry contains: session_id, player1, player1_points
-        console.log('Parsing auth entry to extract game parameters...');
-        const gameParams = cardRpgService.parseAuthEntry(importAuthEntryXDR.trim());
+        console.log("Parsing auth entry to extract game parameters...");
+        const gameParams = cardRpgService.parseAuthEntry(
+          importAuthEntryXDR.trim(),
+        );
 
-        console.log('Extracted from auth entry:', {
+        console.log("Extracted from auth entry:", {
           sessionId: gameParams.sessionId,
           player1: gameParams.player1,
           player1Points: gameParams.player1Points.toString(),
@@ -607,50 +779,58 @@ export function CardRpgGame({
         // Auto-populate read-only fields from parsed auth entry (for display)
         setImportSessionId(gameParams.sessionId.toString());
         setImportPlayer1(gameParams.player1);
-        setImportPlayer1Points((Number(gameParams.player1Points) / 10_000_000).toString());
+        setImportPlayer1Points(
+          (Number(gameParams.player1Points) / 10_000_000).toString(),
+        );
 
         // Verify the user is Player 2 (prevent self-play)
         if (gameParams.player1 === userAddress) {
-          throw new Error('Invalid game: You cannot play against yourself (you are Player 1 in this auth entry)');
+          throw new Error(
+            "Invalid game: You cannot play against yourself (you are Player 1 in this auth entry)",
+          );
         }
 
         // Additional validation: Ensure Player 2 address is different from Player 1
         // (In case user manually edits the Player 2 field)
         if (userAddress === gameParams.player1) {
-          throw new Error('Cannot play against yourself. Player 2 must be different from Player 1.');
+          throw new Error(
+            "Cannot play against yourself. Player 2 must be different from Player 1.",
+          );
         }
 
         const signer = getContractSigner();
 
         // Step 1: Import Player 1's signed auth entry and rebuild transaction
         // New simplified API - only needs: auth entry, player 2 address, player 2 points
-        console.log('Importing Player 1 auth entry and rebuilding transaction...');
+        console.log(
+          "Importing Player 1 auth entry and rebuilding transaction...",
+        );
         const fullySignedTxXDR = await cardRpgService.importAndSignAuthEntry(
           importAuthEntryXDR.trim(),
           userAddress, // Player 2 address (current user)
           p2Points,
-          signer
+          signer,
         );
 
         // Step 2: Player 2 finalizes and submits (they are the transaction source)
-        console.log('Simulating and submitting transaction...');
+        console.log("Simulating and submitting transaction...");
         await cardRpgService.finalizeStartGame(
           fullySignedTxXDR,
           userAddress,
-          signer
+          signer,
         );
 
         // If we get here, transaction succeeded! Now update state.
-        console.log('Transaction submitted successfully! Updating state...');
+        console.log("Transaction submitted successfully! Updating state...");
         setSessionId(gameParams.sessionId);
-        setSuccess('Game created successfully! Both players signed.');
-        setGamePhase('guess');
+        setSuccess("Game created successfully! Both players signed.");
+        setGamePhase("guess");
 
         // Clear import fields
-        setImportAuthEntryXDR('');
-        setImportSessionId('');
-        setImportPlayer1('');
-        setImportPlayer1Points('');
+        setImportAuthEntryXDR("");
+        setImportSessionId("");
+        setImportPlayer1("");
+        setImportPlayer1Points("");
         setImportPlayer2Points(DEFAULT_POINTS);
 
         // Load the newly created game state
@@ -662,16 +842,16 @@ export function CardRpgGame({
         // Clear success message after 2 seconds
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
-        console.error('Import transaction error:', err);
+        console.error("Import transaction error:", err);
         // Extract detailed error message if available
-        let errorMessage = 'Failed to import and sign transaction';
+        let errorMessage = "Failed to import and sign transaction";
         if (err instanceof Error) {
           errorMessage = err.message;
 
           // Check for common Soroban errors
-          if (err.message.includes('simulation failed')) {
+          if (err.message.includes("simulation failed")) {
             errorMessage = `Simulation failed: ${err.message}. Check that you have enough Points and the game parameters are correct.`;
-          } else if (err.message.includes('transaction failed')) {
+          } else if (err.message.includes("transaction failed")) {
             errorMessage = `Transaction failed: ${err.message}. The game could not be created on the blockchain.`;
           }
         }
@@ -694,52 +874,62 @@ export function CardRpgGame({
         setSuccess(null);
         const parsedSessionId = parseInt(loadSessionId.trim());
         if (isNaN(parsedSessionId) || parsedSessionId <= 0) {
-          throw new Error('Enter a valid session ID');
+          throw new Error("Enter a valid session ID");
         }
 
         // Try to load the game (use cache to prevent duplicate calls)
         const game = await requestCache.dedupe(
-          createCacheKey('game-state', parsedSessionId),
+          createCacheKey("game-state", parsedSessionId),
           () => cardRpgService.getGame(parsedSessionId),
-          5000
+          5000,
         );
 
         // Verify game exists and user is one of the players
         if (!game) {
-          throw new Error('Game not found');
+          throw new Error("Game not found");
         }
 
         if (game.player1 !== userAddress && game.player2 !== userAddress) {
-          throw new Error('You are not a player in this game');
+          throw new Error("You are not a player in this game");
         }
 
         // Load successful - update session ID and transition to game
         setSessionId(parsedSessionId);
         setGameState(game);
-        setLoadSessionId('');
+        setLoadSessionId("");
 
         // Determine game phase based on game state
         if (game.winner !== null && game.winner !== undefined) {
           // Game is complete - show reveal phase with winner
-          setGamePhase('reveal');
+          setGamePhase("reveal");
           const isWinner = game.winner === userAddress;
-          setSuccess(isWinner ? '🎉 You won this game!' : 'Game complete. Winner revealed.');
-        } else if (game.player1_guess !== null && game.player1_guess !== undefined &&
-            game.player2_guess !== null && game.player2_guess !== undefined) {
+          setSuccess(
+            isWinner
+              ? "🎉 You won this game!"
+              : "Game complete. Winner revealed.",
+          );
+        } else if (
+          game.player1_guess !== null &&
+          game.player1_guess !== undefined &&
+          game.player2_guess !== null &&
+          game.player2_guess !== undefined
+        ) {
           // Both players guessed, waiting for reveal
-          setGamePhase('reveal');
-          setSuccess('Game loaded! Both players have guessed. You can reveal the winner.');
+          setGamePhase("reveal");
+          setSuccess(
+            "Game loaded! Both players have guessed. You can reveal the winner.",
+          );
         } else {
           // Still in guessing phase
-          setGamePhase('guess');
-          setSuccess('Game loaded! Make your guess.');
+          setGamePhase("guess");
+          setSuccess("Game loaded! Make your guess.");
         }
 
         // Clear success message after 2 seconds
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
-        console.error('Load game error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load game');
+        console.error("Load game error:", err);
+        setError(err instanceof Error ? err.message : "Failed to load game");
       } finally {
         setLoading(false);
       }
@@ -753,8 +943,8 @@ export function CardRpgGame({
         setAuthEntryCopied(true);
         setTimeout(() => setAuthEntryCopied(false), 2000);
       } catch (err) {
-        console.error('Failed to copy auth entry XDR:', err);
-        setError('Failed to copy to clipboard');
+        console.error("Failed to copy auth entry XDR:", err);
+        setError("Failed to copy to clipboard");
       }
     }
   };
@@ -765,8 +955,8 @@ export function CardRpgGame({
         // Build URL with only Player 1's info and auth entry
         // Player 2 will specify their own points when they import
         const params = new URLSearchParams({
-          'game': 'card-rpg',
-          'auth': exportedAuthEntryXDR,
+          game: "card-rpg",
+          auth: exportedAuthEntryXDR,
         });
 
         const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
@@ -774,8 +964,8 @@ export function CardRpgGame({
         setShareUrlCopied(true);
         setTimeout(() => setShareUrlCopied(false), 2000);
       } catch (err) {
-        console.error('Failed to copy share URL:', err);
-        setError('Failed to copy to clipboard');
+        console.error("Failed to copy share URL:", err);
+        setError("Failed to copy to clipboard");
       }
     }
   };
@@ -788,15 +978,15 @@ export function CardRpgGame({
         setShareUrlCopied(true);
         setTimeout(() => setShareUrlCopied(false), 2000);
       } catch (err) {
-        console.error('Failed to copy share URL:', err);
-        setError('Failed to copy to clipboard');
+        console.error("Failed to copy share URL:", err);
+        setError("Failed to copy to clipboard");
       }
     }
   };
 
   const handleMakeGuess = async () => {
     if (guess === null) {
-      setError('Select a number to guess');
+      setError("Select a number to guess");
       return;
     }
 
@@ -812,8 +1002,8 @@ export function CardRpgGame({
         setSuccess(`Guess submitted: ${guess}`);
         await loadGameState();
       } catch (err) {
-        console.error('Make guess error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to make guess');
+        console.error("Make guess error:", err);
+        setError(err instanceof Error ? err.message : "Failed to make guess");
       } finally {
         setLoading(false);
       }
@@ -823,7 +1013,12 @@ export function CardRpgGame({
   const waitForWinner = async () => {
     let updatedGame = await cardRpgService.getGame(sessionId);
     let attempts = 0;
-    while (attempts < 5 && (!updatedGame || updatedGame.winner === null || updatedGame.winner === undefined)) {
+    while (
+      attempts < 5 &&
+      (!updatedGame ||
+        updatedGame.winner === null ||
+        updatedGame.winner === undefined)
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       updatedGame = await cardRpgService.getGame(sessionId);
       attempts += 1;
@@ -844,10 +1039,12 @@ export function CardRpgGame({
         // Fetch updated on-chain state and derive the winner from it (avoid type mismatches from tx result decoding).
         const updatedGame = await waitForWinner();
         setGameState(updatedGame);
-        setGamePhase('complete');
+        setGamePhase("complete");
 
         const isWinner = updatedGame?.winner === userAddress;
-        setSuccess(isWinner ? '🎉 You won!' : 'Game complete! Winner revealed.');
+        setSuccess(
+          isWinner ? "🎉 You won!" : "Game complete! Winner revealed.",
+        );
 
         // Refresh standings immediately (without navigating away)
         onStandingsRefresh();
@@ -855,8 +1052,10 @@ export function CardRpgGame({
         // DON'T call onGameComplete() immediately - let user see the results
         // User can click "Start New Game" when ready
       } catch (err) {
-        console.error('Reveal winner error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to reveal winner');
+        console.error("Reveal winner error:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to reveal winner",
+        );
       } finally {
         setLoading(false);
       }
@@ -865,18 +1064,29 @@ export function CardRpgGame({
 
   const isPlayer1 = gameState && gameState.player1 === userAddress;
   const isPlayer2 = gameState && gameState.player2 === userAddress;
-  const hasGuessed = isPlayer1 ? gameState?.player1_guess !== null && gameState?.player1_guess !== undefined :
-                     isPlayer2 ? gameState?.player2_guess !== null && gameState?.player2_guess !== undefined : false;
+  const hasGuessed = isPlayer1
+    ? gameState?.player1_guess !== null &&
+      gameState?.player1_guess !== undefined
+    : isPlayer2
+      ? gameState?.player2_guess !== null &&
+        gameState?.player2_guess !== undefined
+      : false;
 
   const winningNumber = gameState?.winning_number;
   const player1Guess = gameState?.player1_guess;
   const player2Guess = gameState?.player2_guess;
   const player1Distance =
-    winningNumber !== null && winningNumber !== undefined && player1Guess !== null && player1Guess !== undefined
+    winningNumber !== null &&
+    winningNumber !== undefined &&
+    player1Guess !== null &&
+    player1Guess !== undefined
       ? Math.abs(Number(player1Guess) - Number(winningNumber))
       : null;
   const player2Distance =
-    winningNumber !== null && winningNumber !== undefined && player2Guess !== null && player2Guess !== undefined
+    winningNumber !== null &&
+    winningNumber !== undefined &&
+    player2Guess !== null &&
+    player2Guess !== undefined
       ? Math.abs(Number(player2Guess) - Number(winningNumber))
       : null;
 
@@ -909,57 +1119,57 @@ export function CardRpgGame({
       )}
 
       {/* CREATE GAME PHASE */}
-      {gamePhase === 'create' && (
+      {gamePhase === "create" && (
         <div className="space-y-6">
           {/* Mode Toggle */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
             <button
               onClick={() => {
-                setCreateMode('create');
+                setCreateMode("create");
                 setExportedAuthEntryXDR(null);
-                setImportAuthEntryXDR('');
-                setImportSessionId('');
-                setImportPlayer1('');
-                setImportPlayer1Points('');
+                setImportAuthEntryXDR("");
+                setImportSessionId("");
+                setImportPlayer1("");
+                setImportPlayer1Points("");
                 setImportPlayer2Points(DEFAULT_POINTS);
-                setLoadSessionId('');
+                setLoadSessionId("");
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === 'create'
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                createMode === "create"
+                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
               }`}
             >
               Create & Export
             </button>
             <button
               onClick={() => {
-                setCreateMode('import');
+                setCreateMode("import");
                 setExportedAuthEntryXDR(null);
-                setLoadSessionId('');
+                setLoadSessionId("");
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === 'import'
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                createMode === "import"
+                  ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
               }`}
             >
               Import Auth Entry
             </button>
             <button
               onClick={() => {
-                setCreateMode('load');
+                setCreateMode("load");
                 setExportedAuthEntryXDR(null);
-                setImportAuthEntryXDR('');
-                setImportSessionId('');
-                setImportPlayer1('');
-                setImportPlayer1Points('');
+                setImportAuthEntryXDR("");
+                setImportSessionId("");
+                setImportPlayer1("");
+                setImportPlayer1Points("");
                 setImportPlayer2Points(DEFAULT_POINTS);
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === 'load'
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                createMode === "load"
+                  ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg"
+                  : "bg-white text-gray-600 hover:bg-gray-50"
               }`}
             >
               Load Existing Game
@@ -969,9 +1179,12 @@ export function CardRpgGame({
           <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-bold text-yellow-900">⚡ Quickstart (Dev)</p>
+                <p className="text-sm font-bold text-yellow-900">
+                  ⚡ Quickstart (Dev)
+                </p>
                 <p className="text-xs font-semibold text-yellow-800">
-                  Creates and signs for both dev wallets in one click. Works only in the Games Library.
+                  Creates and signs for both dev wallets in one click. Works
+                  only in the Games Library.
                 </p>
               </div>
               <button
@@ -979,100 +1192,105 @@ export function CardRpgGame({
                 disabled={isBusy || !quickstartAvailable}
                 className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
               >
-                {quickstartLoading ? 'Quickstarting...' : '⚡ Quickstart Game'}
+                {quickstartLoading ? "Quickstarting..." : "⚡ Quickstart Game"}
               </button>
             </div>
           </div>
 
-          {createMode === 'create' ? (
+          {createMode === "create" ? (
             <div className="space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Your Address (Player 1)
-              </label>
-              <input
-                type="text"
-                value={player1Address}
-                onChange={(e) => setPlayer1Address(e.target.value.trim())}
-                placeholder="G..."
-                className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium text-gray-700"
-              />
-              <p className="text-xs font-semibold text-gray-600 mt-1">
-                Pre-filled from your connected wallet. If you change it, you must be able to sign as that address.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Your Points
-              </label>
-              <input
-                type="text"
-                value={player1Points}
-                onChange={(e) => setPlayer1Points(e.target.value)}
-                placeholder="0.1"
-                className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
-              />
-              <p className="text-xs font-semibold text-gray-600 mt-1">
-                Available: {(Number(availablePoints) / 10000000).toFixed(2)} Points
-              </p>
-            </div>
-
-            <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-              <p className="text-xs font-semibold text-blue-800">
-                ℹ️ Player 2 will specify their own address and points when they import your auth entry. You only need to prepare and export your signature.
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t-2 border-gray-100 space-y-4">
-            <p className="text-xs font-semibold text-gray-600">
-              Session ID: {sessionId}
-            </p>
-
-            {!exportedAuthEntryXDR ? (
-              <button
-                onClick={handlePrepareTransaction}
-                disabled={isBusy}
-                className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
-              >
-                {loading ? 'Preparing...' : 'Prepare & Export Auth Entry'}
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
-                  <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
-                    Auth Entry XDR (Player 1 Signed)
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Your Address (Player 1)
+                  </label>
+                  <input
+                    type="text"
+                    value={player1Address}
+                    onChange={(e) => setPlayer1Address(e.target.value.trim())}
+                    placeholder="G..."
+                    className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium text-gray-700"
+                  />
+                  <p className="text-xs font-semibold text-gray-600 mt-1">
+                    Pre-filled from your connected wallet. If you change it, you
+                    must be able to sign as that address.
                   </p>
-                  <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
-                    <code className="text-xs font-mono text-gray-700 break-all">
-                      {exportedAuthEntryXDR}
-                    </code>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      onClick={copyAuthEntryToClipboard}
-                      className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                    >
-                      {authEntryCopied ? '✓ Copied!' : '📋 Copy Auth Entry'}
-                    </button>
-                    <button
-                      onClick={copyShareGameUrlWithAuthEntry}
-                      className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                    >
-                      {shareUrlCopied ? '✓ Copied!' : '🔗 Share URL'}
-                    </button>
-                  </div>
                 </div>
-                <p className="text-xs text-gray-600 text-center font-semibold">
-                  Copy the auth entry XDR or share URL with Player 2 to complete the transaction
-                </p>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Your Points
+                  </label>
+                  <input
+                    type="text"
+                    value={player1Points}
+                    onChange={(e) => setPlayer1Points(e.target.value)}
+                    placeholder="0.1"
+                    className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
+                  />
+                  <p className="text-xs font-semibold text-gray-600 mt-1">
+                    Available: {(Number(availablePoints) / 10000000).toFixed(2)}{" "}
+                    Points
+                  </p>
+                </div>
+
+                <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <p className="text-xs font-semibold text-blue-800">
+                    ℹ️ Player 2 will specify their own address and points when
+                    they import your auth entry. You only need to prepare and
+                    export your signature.
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="pt-4 border-t-2 border-gray-100 space-y-4">
+                <p className="text-xs font-semibold text-gray-600">
+                  Session ID: {sessionId}
+                </p>
+
+                {!exportedAuthEntryXDR ? (
+                  <button
+                    onClick={handlePrepareTransaction}
+                    disabled={isBusy}
+                    className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
+                  >
+                    {loading ? "Preparing..." : "Prepare & Export Auth Entry"}
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
+                      <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
+                        Auth Entry XDR (Player 1 Signed)
+                      </p>
+                      <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
+                        <code className="text-xs font-mono text-gray-700 break-all">
+                          {exportedAuthEntryXDR}
+                        </code>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          onClick={copyAuthEntryToClipboard}
+                          className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+                        >
+                          {authEntryCopied ? "✓ Copied!" : "📋 Copy Auth Entry"}
+                        </button>
+                        <button
+                          onClick={copyShareGameUrlWithAuthEntry}
+                          className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+                        >
+                          {shareUrlCopied ? "✓ Copied!" : "🔗 Share URL"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 text-center font-semibold">
+                      Copy the auth entry XDR or share URL with Player 2 to
+                      complete the transaction
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          ) : createMode === 'import' ? (
+          ) : createMode === "import" ? (
             /* IMPORT MODE */
             <div className="space-y-4">
               <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl">
@@ -1080,20 +1298,28 @@ export function CardRpgGame({
                   📥 Import Auth Entry from Player 1
                 </p>
                 <p className="text-xs text-gray-700 mb-4">
-                  Paste the auth entry XDR from Player 1. Session ID, Player 1 address, and their points will be auto-extracted. You only need to enter your points amount.
+                  Paste the auth entry XDR from Player 1. Session ID, Player 1
+                  address, and their points will be auto-extracted. You only
+                  need to enter your points amount.
                 </p>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-2">
                       Auth Entry XDR
                       {xdrParsing && (
-                        <span className="text-blue-500 text-xs animate-pulse">Parsing...</span>
+                        <span className="text-blue-500 text-xs animate-pulse">
+                          Parsing...
+                        </span>
                       )}
                       {xdrParseSuccess && (
-                        <span className="text-green-600 text-xs">✓ Parsed successfully</span>
+                        <span className="text-green-600 text-xs">
+                          ✓ Parsed successfully
+                        </span>
                       )}
                       {xdrParseError && (
-                        <span className="text-red-600 text-xs">✗ Parse failed</span>
+                        <span className="text-red-600 text-xs">
+                          ✗ Parse failed
+                        </span>
                       )}
                     </label>
                     <textarea
@@ -1103,10 +1329,10 @@ export function CardRpgGame({
                       rows={4}
                       className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:outline-none focus:ring-4 text-xs font-mono resize-none transition-colors ${
                         xdrParseError
-                          ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                          ? "border-red-300 focus:border-red-400 focus:ring-red-100"
                           : xdrParseSuccess
-                          ? 'border-green-300 focus:border-green-400 focus:ring-green-100'
-                          : 'border-blue-200 focus:border-blue-400 focus:ring-blue-100'
+                            ? "border-green-300 focus:border-green-400 focus:ring-green-100"
+                            : "border-blue-200 focus:border-blue-400 focus:ring-blue-100"
                       }`}
                     />
                     {xdrParseError && (
@@ -1118,7 +1344,9 @@ export function CardRpgGame({
                   {/* Auto-populated fields from auth entry (read-only) */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">Session ID (auto-filled)</label>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">
+                        Session ID (auto-filled)
+                      </label>
                       <input
                         type="text"
                         value={importSessionId}
@@ -1128,7 +1356,9 @@ export function CardRpgGame({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">Player 1 Points (auto-filled)</label>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">
+                        Player 1 Points (auto-filled)
+                      </label>
                       <input
                         type="text"
                         value={importPlayer1Points}
@@ -1139,7 +1369,9 @@ export function CardRpgGame({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Player 1 Address (auto-filled)</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">
+                      Player 1 Address (auto-filled)
+                    </label>
                     <input
                       type="text"
                       value={importPlayer1}
@@ -1151,7 +1383,9 @@ export function CardRpgGame({
                   {/* User inputs */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">Player 2 (You)</label>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">
+                        Player 2 (You)
+                      </label>
                       <input
                         type="text"
                         value={userAddress}
@@ -1160,7 +1394,9 @@ export function CardRpgGame({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Your Points *</label>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Your Points *
+                      </label>
                       <input
                         type="text"
                         value={importPlayer2Points}
@@ -1175,13 +1411,19 @@ export function CardRpgGame({
 
               <button
                 onClick={handleImportTransaction}
-                disabled={isBusy || !importAuthEntryXDR.trim() || !importPlayer2Points.trim()}
+                disabled={
+                  isBusy ||
+                  !importAuthEntryXDR.trim() ||
+                  !importPlayer2Points.trim()
+                }
                 className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-600 hover:via-cyan-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
               >
-                {loading ? 'Importing & Signing...' : 'Import & Sign Auth Entry'}
+                {loading
+                  ? "Importing & Signing..."
+                  : "Import & Sign Auth Entry"}
               </button>
             </div>
-          ) : createMode === 'load' ? (
+          ) : createMode === "load" ? (
             /* LOAD EXISTING GAME MODE */
             <div className="space-y-4">
               <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
@@ -1189,7 +1431,8 @@ export function CardRpgGame({
                   🎮 Load Existing Game by Session ID
                 </p>
                 <p className="text-xs text-gray-700 mb-4">
-                  Enter a session ID to load and continue an existing game. You must be one of the players.
+                  Enter a session ID to load and continue an existing game. You
+                  must be one of the players.
                 </p>
                 <input
                   type="text"
@@ -1217,18 +1460,19 @@ export function CardRpgGame({
                   disabled={isBusy || !loadSessionId.trim()}
                   className="py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
                 >
-                  {loading ? 'Loading...' : '🎮 Load Game'}
+                  {loading ? "Loading..." : "🎮 Load Game"}
                 </button>
                 <button
                   onClick={copyShareGameUrlWithSessionId}
                   disabled={!loadSessionId.trim()}
                   className="py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
                 >
-                  {shareUrlCopied ? '✓ Copied!' : '🔗 Share Game'}
+                  {shareUrlCopied ? "✓ Copied!" : "🔗 Share Game"}
                 </button>
               </div>
               <p className="text-xs text-gray-600 text-center font-semibold">
-                Load the game to continue playing, or share the URL with another player
+                Load the game to continue playing, or share the URL with another
+                player
               </p>
             </div>
           ) : null}
@@ -1236,19 +1480,25 @@ export function CardRpgGame({
       )}
 
       {/* GUESS PHASE */}
-      {gamePhase === 'guess' && gameState && (
+      {gamePhase === "guess" && gameState && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className={`p-5 rounded-xl border-2 ${isPlayer1 ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg' : 'border-gray-200 bg-white'}`}>
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">Player 1</div>
+            <div
+              className={`p-5 rounded-xl border-2 ${isPlayer1 ? "border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg" : "border-gray-200 bg-white"}`}
+            >
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
+                Player 1
+              </div>
               <div className="font-mono text-sm font-semibold mb-2 text-gray-800">
                 {gameState.player1.slice(0, 8)}...{gameState.player1.slice(-4)}
               </div>
               <div className="text-xs font-semibold text-gray-600">
-                Points: {(Number(gameState.player1_points) / 10000000).toFixed(2)}
+                Points:{" "}
+                {(Number(gameState.player1_points) / 10000000).toFixed(2)}
               </div>
               <div className="mt-3">
-                {gameState.player1_guess !== null && gameState.player1_guess !== undefined ? (
+                {gameState.player1_guess !== null &&
+                gameState.player1_guess !== undefined ? (
                   <div className="inline-block px-3 py-1 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold shadow-md">
                     ✓ Guessed
                   </div>
@@ -1260,16 +1510,22 @@ export function CardRpgGame({
               </div>
             </div>
 
-            <div className={`p-5 rounded-xl border-2 ${isPlayer2 ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg' : 'border-gray-200 bg-white'}`}>
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">Player 2</div>
+            <div
+              className={`p-5 rounded-xl border-2 ${isPlayer2 ? "border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg" : "border-gray-200 bg-white"}`}
+            >
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
+                Player 2
+              </div>
               <div className="font-mono text-sm font-semibold mb-2 text-gray-800">
                 {gameState.player2.slice(0, 8)}...{gameState.player2.slice(-4)}
               </div>
               <div className="text-xs font-semibold text-gray-600">
-                Points: {(Number(gameState.player2_points) / 10000000).toFixed(2)}
+                Points:{" "}
+                {(Number(gameState.player2_points) / 10000000).toFixed(2)}
               </div>
               <div className="mt-3">
-                {gameState.player2_guess !== null && gameState.player2_guess !== undefined ? (
+                {gameState.player2_guess !== null &&
+                gameState.player2_guess !== undefined ? (
                   <div className="inline-block px-3 py-1 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold shadow-md">
                     ✓ Guessed
                   </div>
@@ -1294,8 +1550,8 @@ export function CardRpgGame({
                     onClick={() => setGuess(num)}
                     className={`p-4 rounded-xl border-2 font-black text-xl transition-all ${
                       guess === num
-                        ? 'border-purple-500 bg-gradient-to-br from-purple-500 to-pink-500 text-white scale-110 shadow-2xl'
-                        : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-lg hover:scale-105'
+                        ? "border-purple-500 bg-gradient-to-br from-purple-500 to-pink-500 text-white scale-110 shadow-2xl"
+                        : "border-gray-200 bg-white hover:border-purple-300 hover:shadow-lg hover:scale-105"
                     }`}
                   >
                     {num}
@@ -1307,7 +1563,7 @@ export function CardRpgGame({
                 disabled={isBusy || guess === null}
                 className="w-full mt-2.5 py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 hover:from-purple-600 hover:via-pink-600 hover:to-red-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
               >
-                {loading ? 'Submitting...' : 'Submit Guess'}
+                {loading ? "Submitting..." : "Submit Guess"}
               </button>
             </div>
           )}
@@ -1323,7 +1579,7 @@ export function CardRpgGame({
       )}
 
       {/* REVEAL PHASE */}
-      {gamePhase === 'reveal' && gameState && (
+      {gamePhase === "reveal" && gameState && (
         <div className="space-y-6">
           <div className="p-8 bg-gradient-to-br from-yellow-50 via-orange-50 to-amber-50 border-2 border-yellow-300 rounded-2xl text-center shadow-xl">
             <div className="text-6xl mb-4">🎊</div>
@@ -1338,14 +1594,14 @@ export function CardRpgGame({
               disabled={isBusy}
               className="px-10 py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-yellow-500 via-orange-500 to-amber-500 hover:from-yellow-600 hover:via-orange-600 hover:to-amber-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
             >
-              {loading ? 'Revealing...' : 'Reveal Winner'}
+              {loading ? "Revealing..." : "Reveal Winner"}
             </button>
           </div>
         </div>
       )}
 
       {/* COMPLETE PHASE */}
-      {gamePhase === 'complete' && gameState && (
+      {gamePhase === "complete" && gameState && (
         <div className="space-y-6">
           <div className="p-10 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 border-2 border-green-300 rounded-2xl text-center shadow-2xl">
             <div className="text-7xl mb-6">🏆</div>
@@ -1357,30 +1613,42 @@ export function CardRpgGame({
             </div>
             <div className="space-y-3 mb-6">
               <div className="p-4 bg-white/70 border border-green-200 rounded-xl">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">Player 1</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
+                  Player 1
+                </p>
                 <p className="font-mono text-xs text-gray-700 mb-2">
-                  {gameState.player1.slice(0, 8)}...{gameState.player1.slice(-4)}
+                  {gameState.player1.slice(0, 8)}...
+                  {gameState.player1.slice(-4)}
                 </p>
                 <p className="text-sm font-semibold text-gray-800">
-                  Guess: {gameState.player1_guess ?? '—'}
-                  {player1Distance !== null ? ` (distance ${player1Distance})` : ''}
+                  Guess: {gameState.player1_guess ?? "—"}
+                  {player1Distance !== null
+                    ? ` (distance ${player1Distance})`
+                    : ""}
                 </p>
               </div>
 
               <div className="p-4 bg-white/70 border border-green-200 rounded-xl">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">Player 2</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
+                  Player 2
+                </p>
                 <p className="font-mono text-xs text-gray-700 mb-2">
-                  {gameState.player2.slice(0, 8)}...{gameState.player2.slice(-4)}
+                  {gameState.player2.slice(0, 8)}...
+                  {gameState.player2.slice(-4)}
                 </p>
                 <p className="text-sm font-semibold text-gray-800">
-                  Guess: {gameState.player2_guess ?? '—'}
-                  {player2Distance !== null ? ` (distance ${player2Distance})` : ''}
+                  Guess: {gameState.player2_guess ?? "—"}
+                  {player2Distance !== null
+                    ? ` (distance ${player2Distance})`
+                    : ""}
                 </p>
               </div>
             </div>
             {gameState.winner && (
               <div className="mt-6 p-5 bg-white border-2 border-green-200 rounded-xl shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-2">Winner</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-2">
+                  Winner
+                </p>
                 <p className="font-mono text-sm font-bold text-gray-800">
                   {gameState.winner.slice(0, 8)}...{gameState.winner.slice(-4)}
                 </p>
