@@ -28,7 +28,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const roomCode = params.get("room") || params.get("r");
     if (roomCode) {
-        setInitRoomCode(roomCode);
+      setInitRoomCode(roomCode);
     }
   }, []);
 
@@ -46,8 +46,7 @@ export default function App() {
         // Initialize Playroom in solo mode
         await insertCoin({
           streamMode: false,
-          skipLobby: true, 
-          reconnect: false // Don't reconnect to previous session
+          skipLobby: true,
         });
       }
       setGameMode(mode);
@@ -60,10 +59,16 @@ export default function App() {
 
   // Auto-join if room code exists and wallet is ready
   useEffect(() => {
-      if (initRoomCode && isConnected && !gameMode && !playroomLoading && !isConnecting) {
-          console.log("Auto-joining game with room:", initRoomCode);
-          handleStartGame('multi');
-      }
+    if (
+      initRoomCode &&
+      isConnected &&
+      !gameMode &&
+      !playroomLoading &&
+      !isConnecting
+    ) {
+      console.log("Auto-joining game with room:", initRoomCode);
+      handleStartGame("multi");
+    }
   }, [initRoomCode, isConnected, gameMode, playroomLoading, isConnecting]);
 
   return (
