@@ -1,5 +1,9 @@
 # Enemy AI Backend
 
+here is the link to the deployed srever on netlify
+
+https://698cada959e1aaba42abc139--celadon-lamington-d6c9ef.netlify.app
+
 This module is a serverless Express backend hosted on Netlify, designed to serve as an Oracle or AI service for Stellar Game Studio. It uses TypeScript, Express, and Netlify Functions.
 
 ## Creation Guide (Step-by-Step)
