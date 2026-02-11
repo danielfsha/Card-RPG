@@ -63,10 +63,8 @@ export function useWallet() {
       setError(null);
 
       ensureKitInitialized(NETWORK_PASSPHRASE);
-      const { address } = await StellarWalletsKit.authModal({
-        modalTitle: "Connect Wallet",
-        modalSubtitle: "Select a wallet to connect",
-      });
+      const result = await StellarWalletsKit.authModal({});
+      const address = typeof result === "string" ? result : result?.address;
 
       if (address) {
         setWallet(address, KIT_WALLET_ID, "wallet");
@@ -173,46 +171,89 @@ export function useWallet() {
       return {
         signTransaction: async (
           xdr: string,
-          opts?: { networkPassphrase?: string },
+          opts?: {
+            networkPassphrase?: string;
+            address?: string;
+            submit?: boolean;
+            submitUrl?: string;
+          },
         ) => {
           try {
-            ensureKitInitialized(networkPassphrase || NETWORK_PASSPHRASE);
+            ensureKitInitialized(
+              opts?.networkPassphrase ||
+                networkPassphrase ||
+                NETWORK_PASSPHRASE,
+            );
             const result = await StellarWalletsKit.signTransaction(xdr, {
               networkPassphrase:
                 opts?.networkPassphrase ||
                 networkPassphrase ||
                 NETWORK_PASSPHRASE,
-              address: publicKey,
+              address: opts?.address || publicKey || undefined,
+              submit: opts?.submit,
+              submitUrl: opts?.submitUrl,
             });
+
+            // Handle potential undefined return from kit if error wasn't thrown
+            if (!result.signedTxXdr) {
+              throw new Error("No signed XDR returned from wallet");
+            }
+
             return {
               signedTxXdr: result.signedTxXdr,
               signerAddress: result.signerAddress,
             };
           } catch (e) {
             console.error("Sign transaction error:", e);
-            throw e;
+            // Return error object as expected by ContractSigner interface
+            return {
+              signedTxXdr: xdr, // Return original on failure? Or empty? usually original + error
+              error: {
+                message:
+                  e instanceof Error
+                    ? e.message
+                    : "Checking wallet signature failed",
+                code: -1, // Generic error code
+              },
+            };
           }
         },
         signAuthEntry: async (
           authEntry: string,
-          opts?: { networkPassphrase?: string },
+          opts?: { networkPassphrase?: string; address?: string },
         ) => {
           try {
-            ensureKitInitialized(networkPassphrase || NETWORK_PASSPHRASE);
+            ensureKitInitialized(
+              opts?.networkPassphrase ||
+                networkPassphrase ||
+                NETWORK_PASSPHRASE,
+            );
             const result = await StellarWalletsKit.signAuthEntry(authEntry, {
               networkPassphrase:
                 opts?.networkPassphrase ||
                 networkPassphrase ||
                 NETWORK_PASSPHRASE,
-              address: publicKey,
+              address: opts?.address || publicKey || undefined,
             });
+
+            if (!result.signedAuthEntry) {
+              throw new Error("No signed auth entry returned from wallet");
+            }
+
             return {
               signedAuthEntry: result.signedAuthEntry,
               signerAddress: result.signerAddress,
             };
           } catch (e) {
             console.error("Sign auth entry error:", e);
-            throw e;
+            return {
+              signedAuthEntry: authEntry,
+              error: {
+                message:
+                  e instanceof Error ? e.message : "Signing auth entry failed",
+                code: -1,
+              },
+            };
           }
         },
       };
@@ -232,9 +273,13 @@ export function useWallet() {
     const checkConnection = async () => {
       // Only check if we are not connected OR if we are supposed to be connected to a real wallet
       // but maybe strict check isn't needed if getAddress() returns null when not connected
-      if (!isConnected && !isConnecting && walletType !== "dev") {
+      if (
+        !isConnected &&
+        !isConnecting &&
+        (walletType === null || walletType === "wallet")
+      ) {
         try {
-          const address = await StellarWalletsKit.getAddress();
+          const address = (await StellarWalletsKit.getAddress()).address;
           if (address) {
             setWallet(address, KIT_WALLET_ID, "wallet");
             setNetwork(NETWORK, NETWORK_PASSPHRASE);
