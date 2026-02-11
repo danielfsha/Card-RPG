@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { getRoomCode } from "playroomkit";
+import { Toaster } from "react-hot-toast"; // Add Toaster import
 import { CardRpgService } from "./cardRpgService";
 import { requestCache, createCacheKey } from "@/utils/requestCache";
 import { useWallet } from "@/hooks/useWallet";
@@ -1275,6 +1276,7 @@ export function CardRpgGame({
 
   return (
     <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-8 shadow-xl border-2 border-purple-200">
+      <Toaster position="bottom-right" /> {/* Move Toaster inside Game */}
       {/* Persistent Multiplayer Header */}
       {gameMode === "multi" && (
         <div className="mb-6 p-3 bg-white/60 border border-purple-100 rounded-xl flex flex-wrap items-center justify-between gap-4">
@@ -1307,7 +1309,6 @@ export function CardRpgGame({
           </div>
         </div>
       )}
-
       <div className="flex items-center mb-6">
         <div>
           <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent">
@@ -1321,19 +1322,16 @@ export function CardRpgGame({
           </p>
         </div>
       </div>
-
       {error && (
         <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-xl">
           <p className="text-sm font-semibold text-red-700">{error}</p>
         </div>
       )}
-
       {success && (
         <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
           <p className="text-sm font-semibold text-green-700">{success}</p>
         </div>
       )}
-
       {/* CREATE GAME PHASE */}
       {gamePhase === "create" && (
         <div className="space-y-6">
@@ -1694,7 +1692,6 @@ export function CardRpgGame({
           ) : null}
         </div>
       )}
-
       {/* GUESS PHASE */}
       {gamePhase === "guess" && gameState && (
         <div className="space-y-6">
@@ -1793,7 +1790,6 @@ export function CardRpgGame({
           )}
         </div>
       )}
-
       {/* REVEAL PHASE */}
       {gamePhase === "reveal" && gameState && (
         <div className="space-y-6">
@@ -1815,7 +1811,6 @@ export function CardRpgGame({
           </div>
         </div>
       )}
-
       {/* COMPLETE PHASE */}
       {gamePhase === "complete" && gameState && (
         <div className="space-y-6">
