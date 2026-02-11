@@ -1,5 +1,5 @@
-import { WalletSwitcher } from './WalletSwitcher';
-import './Layout.css';
+import { WalletSwitcher } from "./WalletSwitcher";
+import "./Layout.css";
 
 interface LayoutProps {
   title?: string;
@@ -8,8 +8,10 @@ interface LayoutProps {
 }
 
 export function Layout({ title, subtitle, children }: LayoutProps) {
-  const resolvedTitle = title || import.meta.env.VITE_GAME_TITLE || 'Stellar Game';
-  const resolvedSubtitle = subtitle || import.meta.env.VITE_GAME_TAGLINE || 'Testnet dev sandbox';
+  const resolvedTitle =
+    title || import.meta.env.VITE_GAME_TITLE || "Stellar Game";
+  const resolvedSubtitle =
+    subtitle || import.meta.env.VITE_GAME_TAGLINE || "Testnet dev sandbox";
 
   return (
     <div className="studio">
@@ -27,7 +29,7 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
         </div>
         <div className="header-actions">
           <div className="network-pill">Testnet</div>
-          <div className="network-pill dev-pill">Dev Wallets</div>
+          {/* <div className="network-pill dev-pill">Dev Wallets</div> */}
           <WalletSwitcher />
         </div>
       </header>

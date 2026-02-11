@@ -21,12 +21,17 @@ export default function App() {
     isConnecting,
     error,
     isDevModeAvailable,
-    connectDev,
+    connect,
   } = useWallet();
   const userAddress = publicKey ?? "";
   const contractId = config.contractIds[GAME_ID] || "";
   const hasContract = contractId && contractId !== "YOUR_CONTRACT_ID";
-  const devReady = isDevModeAvailable();
+  // We can relax devReady check if we allow real wallets, but for now lets keep checking contract config
+  const devReady = isDevModeAvailable(); // Keep this check or remove? User wants "end user connect their wallet"
+  // If we require dev wallets to be present even for real users, that's weird.
+  // But the existing code has rigorous checks. Let's relax them slightly or maybe not.
+  // The user said "make the user end user connect therri wallet... login screem to accept user reqquest".
+  // So probably we should support real wallets primarily.
 
   const [gameMode, setGameMode] = useState<"single" | "multi" | null>(null);
   const [playroomLoading, setPlayroomLoading] = useState(false);
@@ -68,8 +73,10 @@ export default function App() {
   };
 
   const handleConnect = async () => {
-    // Connect as Player 1 by default
-    await connectDev(1);
+    // Connect user wallet (Freighter, etc)
+    if (connect) {
+      await connect();
+    }
   };
 
   // Auto-join if room code exists and wallet is ready
@@ -96,14 +103,6 @@ export default function App() {
             contract IDs, or set
             <code>VITE_CARD_RPG_CONTRACT_ID</code> in the root <code>.env</code>
             .
-          </p>
-        </div>
-      ) : !devReady ? (
-        <div className="card">
-          <h3 className="gradient-text">Dev Wallets Missing</h3>
-          <p style={{ color: "var(--color-ink-muted)", marginTop: "0.75rem" }}>
-            Run <code>bun run setup</code> to generate dev wallets for Player 1
-            and Player 2.
           </p>
         </div>
       ) : !isConnected ? (

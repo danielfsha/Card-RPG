@@ -1,8 +1,41 @@
-import { useCallback } from 'react';
-import { useWalletStore } from '../store/walletSlice';
-import { devWalletService, DevWalletService } from '../services/devWalletService';
-import { NETWORK, NETWORK_PASSPHRASE } from '../utils/constants';
-import type { ContractSigner } from '../types/signer';
+import { useCallback, useEffect } from "react";
+import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
+import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils";
+import { KitEventType, Networks } from "@creit-tech/stellar-wallets-kit/types";
+import { useWalletStore } from "../store/walletSlice";
+import {
+  devWalletService,
+  DevWalletService,
+} from "../services/devWalletService";
+import { NETWORK, NETWORK_PASSPHRASE } from "../utils/constants";
+import type { ContractSigner } from "../types/signer";
+
+const KIT_WALLET_ID = "stellar-wallets-kit";
+let kitInitialized = false;
+
+function resolveNetwork(passphrase?: string): Networks {
+  if (passphrase && Object.values(Networks).includes(passphrase as Networks)) {
+    return passphrase as Networks;
+  }
+  return NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
+}
+
+function ensureKitInitialized(passphrase?: string) {
+  if (typeof window === "undefined") return;
+
+  if (!kitInitialized) {
+    StellarWalletsKit.init({
+      modules: defaultModules(),
+      network: resolveNetwork(passphrase),
+    });
+    kitInitialized = true;
+    return;
+  }
+
+  if (passphrase) {
+    StellarWalletsKit.setNetwork(resolveNetwork(passphrase));
+  }
+}
 
 export function useWallet() {
   const {
@@ -22,6 +55,37 @@ export function useWallet() {
   } = useWalletStore();
 
   /**
+   * Connect with a real wallet (Freighter, etc.)
+   */
+  const connect = useCallback(async () => {
+    try {
+      setConnecting(true);
+      setError(null);
+
+      ensureKitInitialized(NETWORK_PASSPHRASE);
+      const { address } = await StellarWalletsKit.authModal({
+        modalTitle: "Connect Wallet",
+        modalSubtitle: "Select a wallet to connect",
+      });
+
+      if (address) {
+        setWallet(address, KIT_WALLET_ID, "wallet");
+        setNetwork(NETWORK, NETWORK_PASSPHRASE);
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to connect wallet";
+      // User cancelled is a common "error" we might want to ignore or handle gracefully
+      if (errorMessage !== "User cancelled") {
+        setError(errorMessage);
+        console.error("Wallet connection error:", err);
+      }
+    } finally {
+      setConnecting(false);
+    }
+  }, [setWallet, setConnecting, setNetwork, setError]);
+
+  /**
    * Connect as a dev player (for testing)
    * DEV MODE ONLY - Not used in production
    */
@@ -35,18 +99,19 @@ export function useWallet() {
         const address = devWalletService.getPublicKey();
 
         // Update store with dev wallet
-        setWallet(address, `dev-player${playerNumber}`, 'dev');
+        setWallet(address, `dev-player${playerNumber}`, "dev");
         setNetwork(NETWORK, NETWORK_PASSPHRASE);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to connect dev wallet';
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to connect dev wallet";
         setError(errorMessage);
-        console.error('Dev wallet connection error:', err);
+        console.error("Dev wallet connection error:", err);
         throw err;
       } finally {
         setConnecting(false);
       }
     },
-    [setWallet, setConnecting, setNetwork, setError]
+    [setWallet, setConnecting, setNetwork, setError],
   );
 
   /**
@@ -55,8 +120,8 @@ export function useWallet() {
    */
   const switchPlayer = useCallback(
     async (playerNumber: 1 | 2) => {
-      if (walletType !== 'dev') {
-        throw new Error('Can only switch players in dev mode');
+      if (walletType !== "dev") {
+        throw new Error("Can only switch players in dev mode");
       }
 
       try {
@@ -67,24 +132,25 @@ export function useWallet() {
         const address = devWalletService.getPublicKey();
 
         // Update store with new player
-        setWallet(address, `dev-player${playerNumber}`, 'dev');
+        setWallet(address, `dev-player${playerNumber}`, "dev");
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to switch player';
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to switch player";
         setError(errorMessage);
-        console.error('Player switch error:', err);
+        console.error("Player switch error:", err);
         throw err;
       } finally {
         setConnecting(false);
       }
     },
-    [walletType, setWallet, setConnecting, setError]
+    [walletType, setWallet, setConnecting, setError],
   );
 
   /**
    * Disconnect wallet
    */
   const disconnect = useCallback(async () => {
-    if (walletType === 'dev') {
+    if (walletType === "dev") {
       devWalletService.disconnect();
     }
     storeDisconnect();
@@ -96,17 +162,91 @@ export function useWallet() {
    */
   const getContractSigner = useCallback((): ContractSigner => {
     if (!isConnected || !publicKey || !walletType) {
-      throw new Error('Wallet not connected');
+      throw new Error("Wallet not connected");
     }
 
-    if (walletType === 'dev') {
+    if (walletType === "dev") {
       // Dev wallet uses the dev wallet service's signer
       return devWalletService.getSigner();
     } else {
-      // For real wallet integration, implement Freighter or other wallet signing here
-      throw new Error('Real wallet signing not yet implemented. Use dev wallet for now.');
+      // Real wallet signing via stellar-wallets-kit
+      return {
+        signTransaction: async (
+          xdr: string,
+          opts?: { networkPassphrase?: string },
+        ) => {
+          try {
+            ensureKitInitialized(networkPassphrase || NETWORK_PASSPHRASE);
+            const result = await StellarWalletsKit.signTransaction(xdr, {
+              networkPassphrase:
+                opts?.networkPassphrase ||
+                networkPassphrase ||
+                NETWORK_PASSPHRASE,
+              address: publicKey,
+            });
+            return {
+              signedTxXdr: result.signedTxXdr,
+              signerAddress: result.signerAddress,
+            };
+          } catch (e) {
+            console.error("Sign transaction error:", e);
+            throw e;
+          }
+        },
+        signAuthEntry: async (
+          authEntry: string,
+          opts?: { networkPassphrase?: string },
+        ) => {
+          try {
+            ensureKitInitialized(networkPassphrase || NETWORK_PASSPHRASE);
+            const result = await StellarWalletsKit.signAuthEntry(authEntry, {
+              networkPassphrase:
+                opts?.networkPassphrase ||
+                networkPassphrase ||
+                NETWORK_PASSPHRASE,
+              address: publicKey,
+            });
+            return {
+              signedAuthEntry: result.signedAuthEntry,
+              signerAddress: result.signerAddress,
+            };
+          } catch (e) {
+            console.error("Sign auth entry error:", e);
+            throw e;
+          }
+        },
+      };
     }
-  }, [isConnected, publicKey, walletType]);
+  }, [isConnected, publicKey, walletType, networkPassphrase]);
+
+  // Listen for wallet changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Only initialize if we're not using dev wallet
+    if (walletType !== "dev") {
+      ensureKitInitialized(NETWORK_PASSPHRASE);
+    }
+
+    // Check for existing connection if not already connected
+    const checkConnection = async () => {
+      // Only check if we are not connected OR if we are supposed to be connected to a real wallet
+      // but maybe strict check isn't needed if getAddress() returns null when not connected
+      if (!isConnected && !isConnecting && walletType !== "dev") {
+        try {
+          const address = await StellarWalletsKit.getAddress();
+          if (address) {
+            setWallet(address, KIT_WALLET_ID, "wallet");
+            setNetwork(NETWORK, NETWORK_PASSPHRASE);
+          }
+        } catch (e) {
+          // Ignore errors here
+        }
+      }
+    };
+
+    checkConnection();
+  }, [isConnected, isConnecting, walletType, setWallet, setNetwork]);
 
   /**
    * Check if dev mode is available
@@ -126,7 +266,7 @@ export function useWallet() {
    * Get current dev player number
    */
   const getCurrentDevPlayer = useCallback(() => {
-    if (walletType !== 'dev') {
+    if (walletType !== "dev") {
       return null;
     }
     return devWalletService.getCurrentPlayer();
@@ -144,6 +284,7 @@ export function useWallet() {
     error,
 
     // Actions
+    connect,
     connectDev,
     switchPlayer,
     disconnect,
