@@ -279,9 +279,43 @@ export function useWallet() {
                     address: opts?.address || publicKey,
                   },
                 );
-                console.log("Direct Freighter result:", directResult);
-                if (directResult && directResult.signedAuthEntry) {
-                  signedAuthEntry = directResult.signedAuthEntry;
+                console.log(
+                  "Direct Freighter result:",
+                  JSON.stringify(directResult, null, 2),
+                );
+
+                // Inspect all properties of directResult to find the signature
+                if (directResult) {
+                  if (typeof directResult === "string") {
+                    signedAuthEntry = directResult;
+                  } else if (directResult.signedAuthEntry) {
+                    signedAuthEntry = directResult.signedAuthEntry;
+                  } else if (
+                    directResult.address &&
+                    directResult.address.length > 0
+                  ) {
+                    // Sometimes it might just return the address if it failed? Unlikely.
+                  } else {
+                    // Try to find any string property that looks like a signature (base64)
+                    // This is a desperation move but helpful for debugging
+                    const keys = Object.keys(directResult);
+                    for (const key of keys) {
+                      const val = directResult[key];
+                      if (
+                        (typeof val === "string" &&
+                          val.length > 20 &&
+                          key.toLowerCase().includes("xdr")) ||
+                        key.toLowerCase().includes("entry") ||
+                        key.toLowerCase().includes("signed")
+                      ) {
+                        console.log(
+                          `Found potential signature in key '${key}': ${val.substring(0, 10)}...`,
+                        );
+                        signedAuthEntry = val;
+                        break;
+                      }
+                    }
+                  }
                 }
               } catch (fallbackErr) {
                 console.error(
