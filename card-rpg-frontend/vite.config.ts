@@ -1,37 +1,43 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from "path"
-import tailwindcss from "@tailwindcss/vite"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   // Load .env files from the parent directory (repo root)
-  envDir: '..',
+  envDir: "..",
   define: {
-    global: 'globalThis'
+    global: "globalThis",
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      buffer: path.resolve(__dirname, './node_modules/buffer/')
+      "@": path.resolve(__dirname, "./src"),
+      buffer: path.resolve(__dirname, "./node_modules/buffer/"),
     },
-    dedupe: ['@stellar/stellar-sdk']
+    dedupe: ["@stellar/stellar-sdk", "react", "react-dom"],
   },
   optimizeDeps: {
-    include: ['@stellar/stellar-sdk', '@stellar/stellar-sdk/contract', '@stellar/stellar-sdk/rpc', 'buffer'],
+    include: [
+      "@stellar/stellar-sdk",
+      "@stellar/stellar-sdk/contract",
+      "@stellar/stellar-sdk/rpc",
+      "buffer",
+      "react-hot-toast",
+    ],
     esbuildOptions: {
       define: {
-        global: 'globalThis'
-      }
-    }
+        global: "globalThis",
+      },
+    },
   },
   build: {
     commonjsOptions: {
-      transformMixedEsModules: true
-    }
+      transformMixedEsModules: true,
+    },
   },
   server: {
     port: 3000,
-    open: true
-  }
-})
+    open: true,
+  },
+});
