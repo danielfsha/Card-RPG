@@ -284,9 +284,16 @@ export function useWallet() {
                   signedAuthEntry = directResult.signedAuthEntry;
                 }
               } catch (fallbackErr) {
-                console.error("Direct Freighter fallback failed:", fallbackErr);
+                console.error(
+                  "Direct Freighter fallback failed or user declined:",
+                  fallbackErr,
+                );
               }
             }
+
+            // Important: Freighter 2.0+ might return just the signed XDR string directly in some cases
+            // or we might missed extracting it correctly.
+            // Let's verify what we have before giving up.
 
             // If we found something, verify it looks like a base64 string
             if (
@@ -295,6 +302,10 @@ export function useWallet() {
                 signedAuthEntry.length < 10)
             ) {
               // Not a valid auth entry string
+              console.warn(
+                "Invalid signedAuthEntry format detected:",
+                signedAuthEntry,
+              );
               signedAuthEntry = undefined;
             }
 
@@ -308,7 +319,7 @@ export function useWallet() {
             if (!signedAuthEntry) {
               // If the wallet explicitly returns validation errors or "rejected"
               const msg =
-                "User declined the request or the wallet closed unexpectedly.";
+                "No signed auth entry returned. Please ensure you are on Testnet and approve the transaction.";
               throw new Error(msg);
             }
 
@@ -319,17 +330,16 @@ export function useWallet() {
             };
           } catch (e: any) {
             console.error("Sign auth entry error:", e);
-            const errorMessage =
-              e instanceof Error
-                ? e.message
-                : e?.message || "Signing auth entry failed";
 
-            // Check specifically for user decline/cancel which can happen if user closes popup
+            // If we deliberately threw the "No signed auth..." error above, keep it
+            const errorMessage = e instanceof Error ? e.message : String(e);
+
+            // Only classify as "cancelled" if the WALLET actually said so
             if (
-              errorMessage.includes("User declined") ||
-              errorMessage.includes("cancel") ||
-              errorMessage.includes("rejected") ||
-              errorMessage.includes("closed unexpectedly")
+              (errorMessage.includes("User declined") ||
+                errorMessage.includes("cancel") ||
+                errorMessage.includes("rejected")) &&
+              !errorMessage.includes("No signed auth entry returned") // Don't mask our own error
             ) {
               return {
                 signedAuthEntry: authEntry,
@@ -340,14 +350,10 @@ export function useWallet() {
               };
             }
 
-            // Generic error
-            const finalMessage = `Wallet error: ${errorMessage}`;
-
-            // Return the error so the caller can display it via toast
             return {
               signedAuthEntry: authEntry,
               error: {
-                message: finalMessage,
+                message: errorMessage,
                 code: -1,
               },
             };
