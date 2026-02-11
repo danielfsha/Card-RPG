@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "echo 'skipping build (run npm run build manually)'"
   functions = "dist/netlify/functions"
 
 [[redirects]]
