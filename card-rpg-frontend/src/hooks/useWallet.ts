@@ -2,7 +2,10 @@ import { useCallback, useEffect } from "react";
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils";
 import { KitEventType, Networks } from "@creit-tech/stellar-wallets-kit/types";
-import { signAuthEntry as freighterSignAuthEntry } from "@stellar/freighter-api"; // Import Freighter API directly as backup
+import {
+  signAuthEntry as freighterSignAuthEntry,
+  isConnected as isFreighterConnected,
+} from "@stellar/freighter-api"; // Import Freighter API directly
 import { useWalletStore } from "../store/walletSlice";
 import {
   devWalletService,
@@ -223,62 +226,42 @@ export function useWallet() {
           authEntry: string,
           opts?: { networkPassphrase?: string; address?: string },
         ) => {
-          try {
-            ensureKitInitialized(
+          ensureKitInitialized(
+            opts?.networkPassphrase || networkPassphrase || NETWORK_PASSPHRASE,
+          );
+          console.log("Requesting signature for auth entry...", {
+            authEntry,
+            networkPassphrase:
               opts?.networkPassphrase ||
-                networkPassphrase ||
-                NETWORK_PASSPHRASE,
-            );
-            console.log("Requesting signature for auth entry...", {
-              authEntry,
-              networkPassphrase:
-                opts?.networkPassphrase ||
-                networkPassphrase ||
-                NETWORK_PASSPHRASE,
-              address: opts?.address || publicKey,
-            });
+              networkPassphrase ||
+              NETWORK_PASSPHRASE,
+            address: opts?.address || publicKey,
+          });
 
-            const result = await StellarWalletsKit.signAuthEntry(authEntry, {
-              networkPassphrase:
-                opts?.networkPassphrase ||
-                networkPassphrase ||
-                NETWORK_PASSPHRASE,
-              address: opts?.address || publicKey || undefined,
-            });
-
-            console.log(
-              "Wallet signAuthEntry result:",
-              JSON.stringify(result, null, 2),
-            );
-
-            // Freighter sometimes returns the signed auth entry directly as a string in some versions/configurations
-            // or inside the result object. Let's try to handle both.
-            // Also check for 'result' property or other common variations
-            let signedAuthEntry: string | undefined =
-              result?.signedAuthEntry ||
-              (result as any)?.result ||
-              (result as any)?.data ||
-              (result as any)?.signedXdr || // Some older versions use this for txs, checking just in case
-              (typeof result === "string" ? result : undefined);
-
-            // If SWK fails or returns nothing, try calling Freighter API directly as a fallback
-            if (!signedAuthEntry) {
-              console.log(
-                "SWK returned no signed auth entry. Attempting direct Freighter fallback...",
-              );
-
-              // Notify user if we are about to launch a second popup
-              // We use alert() here to re-establish user interaction context, which prevents
-              // browsers from blocking the subsequent popup as "unsolicited".
+          try {
+            // Check for Freighter connection first to prioritize direct calls
+            // This avoids SWK wrapping issues which often return empty signatures
+            let hasFreighter = false;
+            try {
+              // Only check if we are in a browser environment
               if (typeof window !== "undefined") {
-                alert(
-                  "Connection Warning: The wallet returned incomplete data.\n\nWe will now attempt a direct connection to Freighter.\n\nPlease approve the NEXT transaction request that appears.",
-                );
+                const freighterStatus = await isFreighterConnected();
+                hasFreighter = !!freighterStatus?.isConnected;
               }
+            } catch (e) {
+              console.log("Freighter detection check failed:", e);
+            }
 
+            let result: any = null;
+            let signedAuthEntry: string | undefined = undefined;
+
+            // STRATEGY 1: If Freighter is detected, try DIRECT execution first.
+            // This bypasses the buggy SWK wrapper and prevents the need for a second popup.
+            if (hasFreighter) {
+              console.log(
+                "Freighter detected. Attempting direct signing to avoid SWK issues.",
+              );
               try {
-                // Try to use the imported freighter API directly if available
-                // Note: This assumes the user is using Freighter, which is the most common cause of this error
                 const directResult: any = await freighterSignAuthEntry(
                   authEntry,
                   {
@@ -286,57 +269,95 @@ export function useWallet() {
                       opts?.networkPassphrase ||
                       networkPassphrase ||
                       NETWORK_PASSPHRASE,
-                    address: opts?.address || publicKey,
+                    address: opts?.address || publicKey || undefined,
                   },
                 );
+
                 console.log(
-                  "Direct Freighter result:",
+                  "Direct Freighter Primary Result:",
                   JSON.stringify(directResult, null, 2),
                 );
 
-                // Inspect all properties of directResult to find the signature
-                if (directResult) {
-                  if (typeof directResult === "string") {
-                    signedAuthEntry = directResult;
-                  } else if (
-                    directResult.signedAuthEntry &&
-                    typeof directResult.signedAuthEntry === "string"
-                  ) {
-                    signedAuthEntry = directResult.signedAuthEntry;
-                  } else {
-                    // Try to find any string property that looks like a signature (base64)
-                    // This is a desperation move but helpful for debugging
-                    const keys = Object.keys(directResult);
-                    for (const key of keys) {
-                      const val = directResult[key];
-                      // Verify it is a string before accessing string methods
-                      if (typeof val === "string" && val.length > 20) {
-                        const lowerKey = key.toLowerCase();
-                        if (
-                          lowerKey.includes("xdr") ||
-                          lowerKey.includes("entry") ||
-                          lowerKey.includes("signed")
-                        ) {
-                          console.log(
-                            `Found potential signature in key '${key}': ${val.substring(
-                              0,
-                              10,
-                            )}...`,
-                          );
-                          signedAuthEntry = val;
-                          break;
-                        }
-                      }
-                    }
-                  }
+                if (typeof directResult === "string") {
+                  signedAuthEntry = directResult;
+                } else if (directResult?.signedAuthEntry) {
+                  signedAuthEntry = directResult.signedAuthEntry;
                 }
-              } catch (fallbackErr) {
-                console.error(
-                  "Direct Freighter fallback failed or user declined:",
-                  fallbackErr,
-                );
+              } catch (err: any) {
+                console.warn("Direct Freighter signing failed:", err);
+                // If user explicitly rejected, rethrow to stop flow
+                if (
+                  err?.message?.includes("User declined") ||
+                  err?.message?.includes("rejected") ||
+                  (err?.error?.message &&
+                    err.error.message.includes("User declined"))
+                ) {
+                  throw err;
+                }
+                // Otherwise fall through to SWK as backup
               }
             }
+
+            // STRATEGY 2: If Direct failed or wasn't tried, use SWK
+            if (!signedAuthEntry) {
+              console.log("Using StellarWalletsKit for signing...");
+              result = await StellarWalletsKit.signAuthEntry(authEntry, {
+                networkPassphrase:
+                  opts?.networkPassphrase ||
+                  networkPassphrase ||
+                  NETWORK_PASSPHRASE,
+                address: opts?.address || publicKey || undefined,
+              });
+
+              console.log(
+                "Wallet signAuthEntry result:",
+                JSON.stringify(result, null, 2),
+              );
+
+              signedAuthEntry =
+                result?.signedAuthEntry ||
+                (result as any)?.result ||
+                (result as any)?.data ||
+                (result as any)?.signedXdr ||
+                (typeof result === "string" ? result : undefined);
+            }
+
+            // STRATEGY 3: Final Desperation Fallback (Confirm + Retry)
+            if (!signedAuthEntry) {
+              console.warn(
+                "Both Direct and SWK methods returned no data. Triggering manual fallback flow.",
+              );
+
+              if (typeof window !== "undefined") {
+                // Use confirm() as it is clearer than alert for actionable choices
+                const shouldRetry = confirm(
+                  "Connection Warning: The wallet returned no signature data.\n\nThis is likely due to a connection timeout.\n\nClick OK to force a direct connection to Freighter (Recommended).\nClick Cancel to abort.",
+                );
+
+                if (shouldRetry) {
+                  const fallbackResult: any = await freighterSignAuthEntry(
+                    authEntry,
+                    {
+                      networkPassphrase:
+                        opts?.networkPassphrase ||
+                        networkPassphrase ||
+                        NETWORK_PASSPHRASE,
+                      address: opts?.address || publicKey,
+                    },
+                  );
+                  // Handle all fallback shapes
+                  if (typeof fallbackResult === "string") {
+                    signedAuthEntry = fallbackResult;
+                  } else if (fallbackResult?.signedAuthEntry) {
+                    signedAuthEntry = fallbackResult.signedAuthEntry;
+                  }
+                } else {
+                  throw new Error("User cancelled fallback signature attempt.");
+                }
+              }
+            }
+
+            // Check signature presence one last time
 
             // Important: Freighter 2.0+ might return just the signed XDR string directly in some cases
             // or we might missed extracting it correctly.
