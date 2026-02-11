@@ -237,7 +237,9 @@ export function useWallet() {
             });
 
             if (!result.signedAuthEntry) {
-              throw new Error("No signed auth entry returned from wallet");
+              throw new Error(
+                "No signed auth entry returned. Did you reject the request?",
+              );
             }
 
             return {

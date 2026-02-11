@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { insertCoin, isStreamScreen } from "playroomkit";
+import { Toaster } from "react-hot-toast";
 import { config } from "./config";
 import { Layout } from "./components/Layout";
 import { useWallet } from "./hooks/useWallet";
@@ -103,6 +104,7 @@ export default function App() {
 
   return (
     <Layout title={GAME_TITLE} subtitle={GAME_TAGLINE}>
+      <Toaster position="bottom-right" />
       {!hasContract ? (
         <div className="card">
           <h3 className="gradient-text">Contract Not Configured</h3>
