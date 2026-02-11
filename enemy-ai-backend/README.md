@@ -152,9 +152,8 @@ Server will start at `http://localhost:5555`.
 
 ### Deployment
 
-To deploy to Netlify:
+To deploy to Netlify: Don't manually build just ran
 
 ```bash
-npm run build
 netlify deploy
 ```

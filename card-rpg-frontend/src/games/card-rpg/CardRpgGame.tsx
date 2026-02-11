@@ -550,7 +550,7 @@ export function CardRpgGame({
         // Check if user is trying to import their own auth entry (self-play prevention)
         if (gameParams.player1 === userAddress) {
           throw new Error(
-            "You cannot play against yourself. This auth entry was created by you (Player 1).",
+            "Self-Play Error: You are still logged in as Player 1. Please switch your Freighter wallet to a different account and refresh the page to join as Player 2.",
           );
         }
 
