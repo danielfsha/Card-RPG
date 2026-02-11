@@ -47,7 +47,10 @@ export default function App() {
     }
   }, []);
 
-  const handleStartGame = async (mode: "single" | "multi") => {
+  const handleStartGame = async (
+    mode: "single" | "multi",
+    roomCode?: string,
+  ) => {
     setPlayroomLoading(true);
     try {
       // Initialize Playroom skipping the built-in lobby for both modes
@@ -55,6 +58,7 @@ export default function App() {
       await insertCoin({
         streamMode: false,
         skipLobby: true,
+        roomCode: roomCode || undefined, // Join specific room if code provided
       });
 
       // If we wanted to set the profile based on the wallet:
