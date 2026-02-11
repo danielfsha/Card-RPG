@@ -324,10 +324,24 @@ export function useWallet() {
                 ? e.message
                 : e?.message || "Signing auth entry failed";
 
-            // Only prefix if it's not already descriptive
-            const finalMessage = errorMessage.includes("User declined")
-              ? errorMessage
-              : `Wallet error: ${errorMessage}`;
+            // Check specifically for user decline/cancel which can happen if user closes popup
+            if (
+              errorMessage.includes("User declined") ||
+              errorMessage.includes("cancel") ||
+              errorMessage.includes("rejected") ||
+              errorMessage.includes("closed unexpectedly")
+            ) {
+              return {
+                signedAuthEntry: authEntry,
+                error: {
+                  message: "Signing cancelled by user",
+                  code: -2,
+                },
+              };
+            }
+
+            // Generic error
+            const finalMessage = `Wallet error: ${errorMessage}`;
 
             // Return the error so the caller can display it via toast
             return {
