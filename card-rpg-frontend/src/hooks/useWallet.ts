@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils";
 import { KitEventType, Networks } from "@creit-tech/stellar-wallets-kit/types";
+import { signAuthEntry as freighterSignAuthEntry } from "@stellar/freighter-api"; // Import Freighter API directly as backup
 import { useWalletStore } from "../store/walletSlice";
 import {
   devWalletService,
@@ -245,16 +246,64 @@ export function useWallet() {
               address: opts?.address || publicKey || undefined,
             });
 
-            console.log("Wallet signAuthEntry result:", result);
+            console.log(
+              "Wallet signAuthEntry result:",
+              JSON.stringify(result, null, 2),
+            );
 
             // Freighter sometimes returns the signed auth entry directly as a string in some versions/configurations
             // or inside the result object. Let's try to handle both.
-            let signedAuthEntry: string | undefined = result?.signedAuthEntry;
+            // Also check for 'result' property or other common variations
+            let signedAuthEntry: string | undefined =
+              result?.signedAuthEntry ||
+              (result as any)?.result ||
+              (result as any)?.data ||
+              (result as any)?.signedXdr || // Some older versions use this for txs, checking just in case
+              (typeof result === "string" ? result : undefined);
 
-            // Fallback: if result itself is a string, it might be the XDR (though unusual for SWK, it happens with some adapters)
-            if (!signedAuthEntry && typeof result === "string") {
-              signedAuthEntry = result;
+            // If SWK fails or returns nothing, try calling Freighter API directly as a fallback
+            if (!signedAuthEntry) {
+              console.log(
+                "SWK returned no signed auth entry. Attempting direct Freighter fallback...",
+              );
+              try {
+                // Try to use the imported freighter API directly if available
+                // Note: This assumes the user is using Freighter, which is the most common cause of this error
+                const directResult: any = await freighterSignAuthEntry(
+                  authEntry,
+                  {
+                    networkPassphrase:
+                      opts?.networkPassphrase ||
+                      networkPassphrase ||
+                      NETWORK_PASSPHRASE,
+                    address: opts?.address || publicKey,
+                  },
+                );
+                console.log("Direct Freighter result:", directResult);
+                if (directResult && directResult.signedAuthEntry) {
+                  signedAuthEntry = directResult.signedAuthEntry;
+                }
+              } catch (fallbackErr) {
+                console.error("Direct Freighter fallback failed:", fallbackErr);
+              }
             }
+
+            // If we found something, verify it looks like a base64 string
+            if (
+              signedAuthEntry &&
+              (typeof signedAuthEntry !== "string" ||
+                signedAuthEntry.length < 10)
+            ) {
+              // Not a valid auth entry string
+              signedAuthEntry = undefined;
+            }
+
+            console.log(
+              "Extracted signedAuthEntry:",
+              signedAuthEntry
+                ? "Yes (length " + signedAuthEntry.length + ")"
+                : "No",
+            );
 
             if (!signedAuthEntry) {
               // If the wallet explicitly returns validation errors or "rejected"
