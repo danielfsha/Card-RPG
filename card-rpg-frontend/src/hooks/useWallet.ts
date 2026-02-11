@@ -228,6 +228,15 @@ export function useWallet() {
                 networkPassphrase ||
                 NETWORK_PASSPHRASE,
             );
+            console.log("Requesting signature for auth entry...", {
+              authEntry,
+              networkPassphrase:
+                opts?.networkPassphrase ||
+                networkPassphrase ||
+                NETWORK_PASSPHRASE,
+              address: opts?.address || publicKey,
+            });
+
             const result = await StellarWalletsKit.signAuthEntry(authEntry, {
               networkPassphrase:
                 opts?.networkPassphrase ||
@@ -236,18 +245,28 @@ export function useWallet() {
               address: opts?.address || publicKey || undefined,
             });
 
-            if (!result || !result.signedAuthEntry) {
-              const msg = `Authorization failed: ${
-                result
-                  ? "No signed auth entry returned."
-                  : "No result from wallet."
-              } Did you reject the request?`;
+            console.log("Wallet signAuthEntry result:", result);
+
+            // Freighter sometimes returns the signed auth entry directly as a string in some versions/configurations
+            // or inside the result object. Let's try to handle both.
+            let signedAuthEntry: string | undefined = result?.signedAuthEntry;
+
+            // Fallback: if result itself is a string, it might be the XDR (though unusual for SWK, it happens with some adapters)
+            if (!signedAuthEntry && typeof result === "string") {
+              signedAuthEntry = result;
+            }
+
+            if (!signedAuthEntry) {
+              // If the wallet explicitly returns validation errors or "rejected"
+              const msg =
+                "User declined the request or the wallet closed unexpectedly.";
               throw new Error(msg);
             }
 
             return {
-              signedAuthEntry: result.signedAuthEntry,
-              signerAddress: result.signerAddress,
+              signedAuthEntry: signedAuthEntry,
+              signerAddress:
+                typeof result === "object" ? result.signerAddress : undefined,
             };
           } catch (e: any) {
             console.error("Sign auth entry error:", e);
@@ -256,11 +275,16 @@ export function useWallet() {
                 ? e.message
                 : e?.message || "Signing auth entry failed";
 
+            // Only prefix if it's not already descriptive
+            const finalMessage = errorMessage.includes("User declined")
+              ? errorMessage
+              : `Wallet error: ${errorMessage}`;
+
             // Return the error so the caller can display it via toast
             return {
               signedAuthEntry: authEntry,
               error: {
-                message: errorMessage,
+                message: finalMessage,
                 code: -1,
               },
             };

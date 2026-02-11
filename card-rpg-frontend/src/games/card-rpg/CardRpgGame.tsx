@@ -649,7 +649,7 @@ export function CardRpgGame({
           console.log("Stopped polling after 5 minutes");
         }, 300000);
       } catch (err) {
-        console.error("Prepare transaction error:", err);
+        console.error("Prepare transaction error details:", err);
         // Extract detailed error message
         let errorMessage = "Failed to prepare transaction";
         if (err instanceof Error) {
@@ -658,8 +658,17 @@ export function CardRpgGame({
           // Check for common errors
           if (err.message.includes("insufficient")) {
             errorMessage = `Insufficient points: ${err.message}. Make sure you have enough points for this game.`;
-          } else if (err.message.includes("auth")) {
-            errorMessage = `Authorization failed: ${err.message}. Check your wallet connection.`;
+          } else if (
+            err.message.includes("Authorization failed") ||
+            err.message.includes("User declined")
+          ) {
+            // Clean up nested error messages
+            errorMessage = err.message
+              .replace(/Authorization failed: /g, "")
+              .trim();
+            if (!errorMessage)
+              errorMessage =
+                "Authorization failed. Check your wallet connection.";
           }
         }
 
