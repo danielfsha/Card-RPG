@@ -84,7 +84,8 @@ export function CardRpgGame({
   useEffect(() => {
     if (gameMode === "multi" && myPlayer) {
       myPlayer.setState("ready", isMyReady);
-      myPlayer.setState("name", userAddress); // Sync name/address for lobby display
+      myPlayer.setState("name", userAddress); // Sync name for lobby display
+      myPlayer.setState("address", userAddress); // Explicitly sync address for game logic
     }
   }, [isMyReady, myPlayer, gameMode, userAddress]);
 
@@ -174,20 +175,41 @@ export function CardRpgGame({
 
     // We need to know which playroom player is P1.
     // In Playroom, we can verify if a player object corresponds to "me".
-    // A stable way is: Sort by ID. First ID is P1 (Host), Second is P2.
-    // The reference game does: `players.sort((a, b) => a.id.localeCompare(b.id));`
-
     const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
+
+    // Determine if I am P1 or P2 to enforce local truth (Wallet Address) over potentially stale Playroom state
+    const myIndex = sortedPlayers.findIndex((p) => p.id === myPlayer?.id);
+
     if (sortedPlayers.length > 0) {
-      p1Addr = sortedPlayers[0].getState("address") || "";
-    }
-    if (sortedPlayers.length > 1) {
-      p2Addr = sortedPlayers[1].getState("address") || "";
+      if (myIndex === 0 && userAddress) {
+        // I am Player 1, use my wallet address directly
+        p1Addr = userAddress;
+      } else {
+        p1Addr =
+          sortedPlayers[0].getState("address") ||
+          sortedPlayers[0].getState("name") ||
+          "";
+      }
     }
 
-    setPlayer1Address(p1Addr);
-    setPlayer2Address(p2Addr);
-  }, [players, userAddress]);
+    if (sortedPlayers.length > 1) {
+      if (myIndex === 1 && userAddress) {
+        // I am Player 2, use my wallet address directly
+        p2Addr = userAddress;
+      } else {
+        p2Addr =
+          sortedPlayers[1].getState("address") ||
+          sortedPlayers[1].getState("name") ||
+          "";
+      }
+    }
+
+    // Only update if we have found valid players, otherwise keep existing state (handling single player fallback)
+    if (players.length > 0) {
+      setPlayer1Address(p1Addr);
+      setPlayer2Address(p2Addr);
+    }
+  }, [players, userAddress, myPlayer]);
 
   // Playroom: Auto-import auth entry for Guest
   useEffect(() => {
