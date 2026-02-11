@@ -51,6 +51,15 @@ export default function App() {
     setPlayroomLoading(true);
     try {
       if (mode === "multi") {
+        // Create a profile object with relevant user info
+        const profile = {
+          name: userAddress
+            ? `${userAddress.slice(0, 4)}...${userAddress.slice(-4)}`
+            : "Player",
+          auth: userAddress ? { id: userAddress } : undefined,
+          // You can add other properties here as needed
+        };
+
         // Initialize Playroom with Lobby
         await insertCoin({
           streamMode: false,
