@@ -394,7 +394,9 @@ export function useWallet() {
             return {
               signedAuthEntry: signedAuthEntry,
               signerAddress:
-                typeof result === "object" ? result.signerAddress : undefined,
+                result && typeof result === "object"
+                  ? result.signerAddress
+                  : undefined,
             };
           } catch (e: any) {
             console.error("Sign auth entry error:", e);
