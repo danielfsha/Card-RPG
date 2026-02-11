@@ -266,6 +266,16 @@ export function useWallet() {
               console.log(
                 "SWK returned no signed auth entry. Attempting direct Freighter fallback...",
               );
+
+              // Notify user if we are about to launch a second popup
+              // We use alert() here to re-establish user interaction context, which prevents
+              // browsers from blocking the subsequent popup as "unsolicited".
+              if (typeof window !== "undefined") {
+                alert(
+                  "Connection Warning: The wallet returned incomplete data.\n\nWe will now attempt a direct connection to Freighter.\n\nPlease approve the NEXT transaction request that appears.",
+                );
+              }
+
               try {
                 // Try to use the imported freighter API directly if available
                 // Note: This assumes the user is using Freighter, which is the most common cause of this error
@@ -288,31 +298,34 @@ export function useWallet() {
                 if (directResult) {
                   if (typeof directResult === "string") {
                     signedAuthEntry = directResult;
-                  } else if (directResult.signedAuthEntry) {
-                    signedAuthEntry = directResult.signedAuthEntry;
                   } else if (
-                    directResult.address &&
-                    directResult.address.length > 0
+                    directResult.signedAuthEntry &&
+                    typeof directResult.signedAuthEntry === "string"
                   ) {
-                    // Sometimes it might just return the address if it failed? Unlikely.
+                    signedAuthEntry = directResult.signedAuthEntry;
                   } else {
                     // Try to find any string property that looks like a signature (base64)
                     // This is a desperation move but helpful for debugging
                     const keys = Object.keys(directResult);
                     for (const key of keys) {
                       const val = directResult[key];
-                      if (
-                        (typeof val === "string" &&
-                          val.length > 20 &&
-                          key.toLowerCase().includes("xdr")) ||
-                        key.toLowerCase().includes("entry") ||
-                        key.toLowerCase().includes("signed")
-                      ) {
-                        console.log(
-                          `Found potential signature in key '${key}': ${val.substring(0, 10)}...`,
-                        );
-                        signedAuthEntry = val;
-                        break;
+                      // Verify it is a string before accessing string methods
+                      if (typeof val === "string" && val.length > 20) {
+                        const lowerKey = key.toLowerCase();
+                        if (
+                          lowerKey.includes("xdr") ||
+                          lowerKey.includes("entry") ||
+                          lowerKey.includes("signed")
+                        ) {
+                          console.log(
+                            `Found potential signature in key '${key}': ${val.substring(
+                              0,
+                              10,
+                            )}...`,
+                          );
+                          signedAuthEntry = val;
+                          break;
+                        }
                       }
                     }
                   }
