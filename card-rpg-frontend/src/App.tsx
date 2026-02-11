@@ -50,29 +50,17 @@ export default function App() {
   const handleStartGame = async (mode: "single" | "multi") => {
     setPlayroomLoading(true);
     try {
-      if (mode === "multi") {
-        // Create a profile object with relevant user info
-        const profile = {
-          name: userAddress
-            ? `${userAddress.slice(0, 4)}...${userAddress.slice(-4)}`
-            : "Player",
-          auth: userAddress ? { id: userAddress } : undefined,
-          // You can add other properties here as needed
-        };
+      // Initialize Playroom skipping the built-in lobby for both modes
+      // The user wants to avoid the "bot or friend" selection screen
+      await insertCoin({
+        streamMode: false,
+        skipLobby: true,
+      });
 
-        // Initialize Playroom with Lobby
-        await insertCoin({
-          streamMode: false,
-          skipLobby: false,
-          // If we have a room code, Playroom automatically handles it via URL
-        });
-      } else {
-        // Initialize Playroom in solo mode
-        await insertCoin({
-          streamMode: false,
-          skipLobby: true,
-        });
-      }
+      // If we wanted to set the profile based on the wallet:
+      // const profile = ...
+      // myPlayer().setState("profile", profile);
+
       setGameMode(mode);
     } catch (e) {
       console.error("Failed to start game:", e);
