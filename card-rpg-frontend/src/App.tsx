@@ -38,6 +38,12 @@ export default function App() {
   const [initRoomCode, setInitRoomCode] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // Initial auto-join state based on URL
+  const [isAutoJoining, setIsAutoJoining] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return !!(params.get("room") || params.get("r"));
+  });
+
   // Check for room code in URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -70,6 +76,7 @@ export default function App() {
       console.error("Failed to start game:", e);
     } finally {
       setPlayroomLoading(false);
+      setIsAutoJoining(false);
     }
   };
 
@@ -90,7 +97,7 @@ export default function App() {
       !isConnecting
     ) {
       console.log("Auto-joining game with room:", initRoomCode);
-      handleStartGame("multi");
+      handleStartGame("multi", initRoomCode);
     }
   }, [initRoomCode, isConnected, gameMode, playroomLoading, isConnecting]);
 
@@ -114,7 +121,7 @@ export default function App() {
         <ModeSelectScreen
           onSelectMode={handleStartGame}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          isLoading={playroomLoading}
+          isLoading={playroomLoading || isAutoJoining}
         />
       ) : (
         // Game Loaded
@@ -128,6 +135,7 @@ export default function App() {
               // Optional: Handle return to menu
               // location.reload();
             }}
+            gameMode={gameMode || "single"}
           />
         </GameEngineProvider>
       )}

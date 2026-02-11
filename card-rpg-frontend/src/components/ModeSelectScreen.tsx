@@ -18,9 +18,21 @@ export function ModeSelectScreen({
   const handleJoinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (joinCode.trim()) {
-      onSelectMode("multi", joinCode.trim());
+      // Update URL and reload to trigger auto-join logic
+      window.location.href = `?room=${joinCode.trim()}`;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "3rem" }}>
+        <h3 className="gradient-text" style={{ marginBottom: "2rem" }}>
+          Loading
+        </h3>
+        <div className="notice info">Initializing game environment...</div>
+      </div>
+    );
+  }
 
   if (inJoinMode) {
     return (
