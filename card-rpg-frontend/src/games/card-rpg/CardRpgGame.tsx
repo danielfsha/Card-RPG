@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { getRoomCode } from "playroomkit";
-import { Toaster } from "react-hot-toast"; // Add Toaster import
+import { Toaster, toast } from "react-hot-toast"; // Add Toaster import
 import { CardRpgService } from "./cardRpgService";
 import { requestCache, createCacheKey } from "@/utils/requestCache";
 import { useWallet } from "@/hooks/useWallet";
@@ -664,6 +664,7 @@ export function CardRpgGame({
         }
 
         setError(errorMessage);
+        toast.error(errorMessage);
 
         // Keep the component in 'create' phase so user can see the error and retry
       } finally {
@@ -784,10 +785,13 @@ export function CardRpgGame({
         setSuccess(
           "Quickstart complete! Both players signed and the game is ready.",
         );
+        toast.success("Quickstart complete!");
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
         console.error("Quickstart error:", err);
-        setError(err instanceof Error ? err.message : "Quickstart failed");
+        const msg = err instanceof Error ? err.message : "Quickstart failed";
+        setError(msg);
+        toast.error(msg);
       } finally {
         setQuickstartLoading(false);
       }
@@ -908,6 +912,7 @@ export function CardRpgGame({
         }
 
         setError(errorMessage);
+        toast.error(errorMessage);
 
         // Keep the component in 'create' phase so user can see the error and retry
         // Don't change gamePhase or clear any fields - let the user see what went wrong
@@ -1051,10 +1056,13 @@ export function CardRpgGame({
         await cardRpgService.makeGuess(sessionId, userAddress, guess, signer);
 
         setSuccess(`Guess submitted: ${guess}`);
+        toast.success(`Guess submitted: ${guess}`);
         await loadGameState();
       } catch (err) {
         console.error("Make guess error:", err);
-        setError(err instanceof Error ? err.message : "Failed to make guess");
+        const msg = err instanceof Error ? err.message : "Failed to make guess";
+        setError(msg);
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
@@ -1096,6 +1104,7 @@ export function CardRpgGame({
         setSuccess(
           isWinner ? "🎉 You won!" : "Game complete! Winner revealed.",
         );
+        toast.success(isWinner ? "You won!" : "Winner revealed.");
 
         // Refresh standings immediately (without navigating away)
         onStandingsRefresh();

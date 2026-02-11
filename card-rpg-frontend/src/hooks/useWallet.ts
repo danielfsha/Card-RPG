@@ -236,23 +236,31 @@ export function useWallet() {
               address: opts?.address || publicKey || undefined,
             });
 
-            if (!result.signedAuthEntry) {
-              throw new Error(
-                "No signed auth entry returned. Did you reject the request?",
-              );
+            if (!result || !result.signedAuthEntry) {
+              const msg = `Authorization failed: ${
+                result
+                  ? "No signed auth entry returned."
+                  : "No result from wallet."
+              } Did you reject the request?`;
+              throw new Error(msg);
             }
 
             return {
               signedAuthEntry: result.signedAuthEntry,
               signerAddress: result.signerAddress,
             };
-          } catch (e) {
+          } catch (e: any) {
             console.error("Sign auth entry error:", e);
+            const errorMessage =
+              e instanceof Error
+                ? e.message
+                : e?.message || "Signing auth entry failed";
+
+            // Return the error so the caller can display it via toast
             return {
               signedAuthEntry: authEntry,
               error: {
-                message:
-                  e instanceof Error ? e.message : "Signing auth entry failed",
+                message: errorMessage,
                 code: -1,
               },
             };
