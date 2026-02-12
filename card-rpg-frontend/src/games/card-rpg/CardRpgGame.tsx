@@ -12,6 +12,10 @@ import {
   DevWalletService,
 } from "@/services/devWalletService";
 import type { Game } from "./bindings";
+import { MultiplayerLobby } from "./components/MultiplayerLobby";
+import { GameHeader } from "./components/GameHeader";
+import { SetupScreen } from "./components/SetupScreen";
+import { ActiveGame } from "./components/ActiveGame";
 
 const createRandomSessionId = (): number => {
   if (typeof crypto !== "undefined" && crypto.getRandomValues) {
@@ -1223,186 +1227,28 @@ export function CardRpgGame({
       : null;
 
   if (gameMode === "multi" && !gameStarted) {
-    const roomCode = getRoomCode();
     return (
-      <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-8 shadow-xl border-2 border-purple-200">
-        <div className="text-center mb-6">
-          <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-2">
-            Multiplayer Lobby
-          </h2>
-          <p className="text-gray-600 font-semibold mb-4">
-            Waiting for players. Share this room code:
-          </p>
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <span className="text-2xl font-mono font-black tracking-widest bg-gray-100 px-4 py-2 rounded-lg border-2 border-purple-200">
-              {roomCode}
-            </span>
-            <button
-              onClick={() => {
-                const url = new URL(window.location.href);
-                if (typeof roomCode === "string") {
-                  url.searchParams.set("room", roomCode);
-                }
-                navigator.clipboard.writeText(url.toString());
-              }}
-              className="p-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 transition"
-              title="Copy Invite Link"
-            >
-              🔗
-            </button>
-          </div>
-        </div>
-
-        <div className="max-w-md mx-auto space-y-4 mb-8">
-          <div className="p-4 bg-white/80 rounded-xl border border-purple-100 shadow-sm">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
-              <span className="font-bold text-gray-700">
-                Players ({players.length}/2)
-              </span>
-            </div>
-            <div className="space-y-3">
-              {players.map((p: any) => {
-                const isMe = p.id === myPlayer?.id;
-                const pName = p.getState("name") || p.id;
-                const pReady = p.getState("ready");
-                return (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          pReady
-                            ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                            : "bg-gray-300"
-                        }`}
-                      />
-                      <div>
-                        <div className="text-sm font-bold text-gray-800">
-                          {isMe ? (
-                            "You"
-                          ) : (
-                            <span className="font-mono" title={pName}>
-                              {pName.slice(0, 6)}...{pName.slice(-4)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500 font-mono">
-                          {isMe ? (
-                            <span className="font-mono">
-                              {pName.slice(0, 6)}...{pName.slice(-4)}
-                            </span>
-                          ) : (
-                            "Opponent"
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {pReady ? (
-                      <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
-                        READY
-                      </span>
-                    ) : (
-                      <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                        NOT READY
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {players.length === 0 && (
-                <div className="text-center py-4 text-gray-400 italic">
-                  Connecting to room...
-                </div>
-              )}
-              {players.length === 1 && (
-                <div className="flex items-center justify-center gap-2 py-4 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 bg-gray-50/50">
-                  <span className="animate-pulse">
-                    Waiting for opponent to join...
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {players.length >= 2 && !isMyReady && (
-            <div className="p-3 bg-blue-50 text-blue-800 text-sm font-semibold rounded-lg text-center border border-blue-100">
-              Both players connected! Click Ready to start.
-            </div>
-          )}
-          {players.length >= 2 && isMyReady && !allReady && (
-            <div className="p-3 bg-amber-50 text-amber-800 text-sm font-semibold rounded-lg text-center border border-amber-100">
-              Waiting for opponent to ready up...
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-center">
-          <button
-            onClick={handleMultiplayerReady}
-            disabled={players.length < 2 && !isMyReady}
-            className={`px-8 py-4 rounded-xl font-bold text-white text-lg transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:grayscale disabled:transform-none ${
-              isMyReady
-                ? "bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600"
-                : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-            }`}
-          >
-            {isMyReady ? "CANCEL READY" : "READY TO PLAY"}
-          </button>
-        </div>
-      </div>
+      <MultiplayerLobby
+        gameMode={gameMode}
+        gameStarted={gameStarted}
+        players={players}
+        myPlayer={myPlayer}
+        isMyReady={isMyReady}
+        allReady={allReady}
+        handleMultiplayerReady={handleMultiplayerReady}
+      />
     );
   }
 
   return (
     <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-8 shadow-xl border-2 border-purple-200">
       <Toaster position="bottom-right" /> {/* Move Toaster inside Game */}
-      {/* Persistent Multiplayer Header */}
-      {gameMode === "multi" && (
-        <div className="mb-6 p-3 bg-white/60 border border-purple-100 rounded-xl flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">
-              Room
-            </span>
-            <span className="font-mono font-bold text-gray-800 bg-white px-2 py-1 rounded border border-purple-200">
-              {getRoomCode()}
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-medium text-gray-600">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"></div>
-              <span>You</span>
-            </div>
-            {players
-              .filter((p: any) => p.id !== myPlayer?.id)
-              .map((p: any) => {
-                const name = p.getState("name") || "Opponent";
-                return (
-                  <div key={p.id} className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"></div>
-                    <span className="font-mono" title={name}>
-                      {name.slice(0, 4)}...{name.slice(-4)}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-      <div className="flex items-center mb-6">
-        <div>
-          <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent">
-            Card Rpg Game 🎲
-          </h2>
-          <p className="text-sm text-gray-700 font-semibold mt-1">
-            Guess a number 1-10. Closest guess wins!
-          </p>
-          <p className="text-xs text-gray-500 font-mono mt-1">
-            Session ID: {sessionId}
-          </p>
-        </div>
-      </div>
+      <GameHeader
+        gameMode={gameMode}
+        players={players}
+        myPlayer={myPlayer}
+        sessionId={sessionId}
+      />
       {error && (
         <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-xl">
           <p className="text-sm font-semibold text-red-700">{error}</p>
@@ -1413,573 +1259,65 @@ export function CardRpgGame({
           <p className="text-sm font-semibold text-green-700">{success}</p>
         </div>
       )}
-      {/* CREATE GAME PHASE */}
-      {gamePhase === "create" && (
-        <div className="space-y-6">
-          {/* Mode Toggle */}
-          {gameMode !== "multi" && (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
-              <button
-                onClick={() => {
-                  setCreateMode("create");
-                  setExportedAuthEntryXDR(null);
-                  setImportAuthEntryXDR("");
-                  setImportSessionId("");
-                  setImportPlayer1("");
-                  setImportPlayer1Points("");
-                  setImportPlayer2Points(DEFAULT_POINTS);
-                  setLoadSessionId("");
-                }}
-                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                  createMode === "create"
-                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Create & Export
-              </button>
-              <button
-                onClick={() => {
-                  setCreateMode("import");
-                  setExportedAuthEntryXDR(null);
-                  setLoadSessionId("");
-                }}
-                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                  createMode === "import"
-                    ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Import Auth Entry
-              </button>
-              <button
-                onClick={() => {
-                  setCreateMode("load");
-                  setExportedAuthEntryXDR(null);
-                  setImportAuthEntryXDR("");
-                  setImportSessionId("");
-                  setImportPlayer1("");
-                  setImportPlayer1Points("");
-                  setImportPlayer2Points(DEFAULT_POINTS);
-                }}
-                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                  createMode === "load"
-                    ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Load Existing Game
-              </button>
-            </div>
-          )}
+      <SetupScreen
+        gamePhase={gamePhase}
+        createMode={createMode}
+        setCreateMode={setCreateMode}
+        gameMode={gameMode!}
+        isHost={isHost}
+        userAddress={userAddress}
+        sessionId={sessionId}
+        availablePoints={availablePoints}
+        player1Address={player1Address}
+        setPlayer1Address={setPlayer1Address}
+        player1Points={player1Points}
+        setPlayer1Points={setPlayer1Points}
+        importAuthEntryXDR={importAuthEntryXDR}
+        setImportAuthEntryXDR={setImportAuthEntryXDR}
+        importSessionId={importSessionId}
+        importPlayer1={importPlayer1}
+        importPlayer1Points={importPlayer1Points}
+        importPlayer2Points={importPlayer2Points}
+        setImportPlayer2Points={setImportPlayer2Points}
+        loadSessionId={loadSessionId}
+        setLoadSessionId={setLoadSessionId}
+        exportedAuthEntryXDR={exportedAuthEntryXDR}
+        setExportedAuthEntryXDR={setExportedAuthEntryXDR}
+        setImportSessionId={setImportSessionId}
+        setImportPlayer1={setImportPlayer1}
+        setImportPlayer1Points={setImportPlayer1Points}
+        setImportAuthEntryXDRState={setImportAuthEntryXDR}
+        xdrParsing={xdrParsing}
+        xdrParseSuccess={xdrParseSuccess}
+        xdrParseError={xdrParseError}
+        loading={loading}
+        isBusy={isBusy}
+        quickstartLoading={quickstartLoading}
+        quickstartAvailable={quickstartAvailable}
+        authEntryCopied={authEntryCopied}
+        shareUrlCopied={shareUrlCopied}
+        handlePrepareTransaction={handlePrepareTransaction}
+        handleImportTransaction={handleImportTransaction}
+        handleLoadExistingGame={handleLoadExistingGame}
+        handleQuickStart={handleQuickStart}
+        copyAuthEntryToClipboard={copyAuthEntryToClipboard}
+        copyShareGameUrlWithAuthEntry={copyShareGameUrlWithAuthEntry}
+        copyShareGameUrlWithSessionId={copyShareGameUrlWithSessionId}
+        DEFAULT_POINTS={DEFAULT_POINTS}
+      />
+      <ActiveGame
+        gamePhase={gamePhase}
+        gameState={gameState}
+        userAddress={userAddress}
+        guess={guess}
+        setGuess={setGuess}
+        loading={loading}
+        isBusy={isBusy}
+        handleMakeGuess={handleMakeGuess}
+        handleRevealWinner={handleRevealWinner}
+        handleStartNewGame={handleStartNewGame}
+      />
 
-          {gameMode !== "multi" && (
-            <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-yellow-900">
-                    ⚡ Quickstart (Dev)
-                  </p>
-                  <p className="text-xs font-semibold text-yellow-800">
-                    Creates and signs for both dev wallets in one click. Works
-                    only in the Games Library.
-                  </p>
-                </div>
-                <button
-                  onClick={handleQuickStart}
-                  disabled={isBusy || !quickstartAvailable}
-                  className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
-                >
-                  {quickstartLoading
-                    ? "Quickstarting..."
-                    : "⚡ Quickstart Game"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {createMode === "create" ? (
-            gameMode === "multi" && !isHost ? (
-              <div className="p-12 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                <h3 className="text-lg font-bold text-gray-700">
-                  Waiting for Host...
-                </h3>
-                <p className="text-gray-500 text-sm mt-2">
-                  Player 1 is preparing the game. Please wait.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Your Address (Player 1)
-                    </label>
-                    <input
-                      type="text"
-                      value={player1Address}
-                      onChange={(e) => setPlayer1Address(e.target.value.trim())}
-                      placeholder="G..."
-                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium text-gray-700"
-                    />
-                    <p className="text-xs font-semibold text-gray-600 mt-1">
-                      Pre-filled from your connected wallet. If you change it,
-                      you must be able to sign as that address.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Your Points
-                    </label>
-                    <input
-                      type="text"
-                      value={player1Points}
-                      onChange={(e) => setPlayer1Points(e.target.value)}
-                      placeholder="0.1"
-                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
-                    />
-                    <p className="text-xs font-semibold text-gray-600 mt-1">
-                      Available:{" "}
-                      {(Number(availablePoints) / 10000000).toFixed(2)} Points
-                    </p>
-                  </div>
-
-                  <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                    <p className="text-xs font-semibold text-blue-800">
-                      ℹ️ Player 2 will specify their own address and points when
-                      they import your auth entry. You only need to prepare and
-                      export your signature.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t-2 border-gray-100 space-y-4">
-                  <p className="text-xs font-semibold text-gray-600">
-                    Session ID: {sessionId}
-                  </p>
-
-                  {!exportedAuthEntryXDR ? (
-                    <button
-                      onClick={handlePrepareTransaction}
-                      disabled={isBusy}
-                      className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
-                    >
-                      {loading ? "Preparing..." : "Prepare & Export Auth Entry"}
-                    </button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
-                        <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
-                          Auth Entry XDR (Player 1 Signed)
-                        </p>
-                        <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
-                          <code className="text-xs font-mono text-gray-700 break-all">
-                            {exportedAuthEntryXDR}
-                          </code>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <button
-                            onClick={copyAuthEntryToClipboard}
-                            className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                          >
-                            {authEntryCopied
-                              ? "✓ Copied!"
-                              : "📋 Copy Auth Entry"}
-                          </button>
-                          <button
-                            onClick={copyShareGameUrlWithAuthEntry}
-                            className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                          >
-                            {shareUrlCopied ? "✓ Copied!" : "🔗 Share URL"}
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600 text-center font-semibold">
-                        Copy the auth entry XDR or share URL with Player 2 to
-                        complete the transaction
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          ) : createMode === "import" ? (
-            /* IMPORT MODE */
-            <div className="space-y-4">
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl">
-                <p className="text-sm font-semibold text-blue-800 mb-2">
-                  📥 Import Auth Entry from Player 1
-                </p>
-                <p className="text-xs text-gray-700 mb-4">
-                  Paste the auth entry XDR from Player 1. Session ID, Player 1
-                  address, and their points will be auto-extracted. You only
-                  need to enter your points amount.
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-2">
-                      Auth Entry XDR
-                      {xdrParsing && (
-                        <span className="text-blue-500 text-xs animate-pulse">
-                          Parsing...
-                        </span>
-                      )}
-                      {xdrParseSuccess && (
-                        <span className="text-green-600 text-xs">
-                          ✓ Parsed successfully
-                        </span>
-                      )}
-                      {xdrParseError && (
-                        <span className="text-red-600 text-xs">
-                          ✗ Parse failed
-                        </span>
-                      )}
-                    </label>
-                    <textarea
-                      value={importAuthEntryXDR}
-                      onChange={(e) => setImportAuthEntryXDR(e.target.value)}
-                      placeholder="Paste Player 1's signed auth entry XDR here..."
-                      rows={4}
-                      className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:outline-none focus:ring-4 text-xs font-mono resize-none transition-colors ${
-                        xdrParseError
-                          ? "border-red-300 focus:border-red-400 focus:ring-red-100"
-                          : xdrParseSuccess
-                            ? "border-green-300 focus:border-green-400 focus:ring-green-100"
-                            : "border-blue-200 focus:border-blue-400 focus:ring-blue-100"
-                      }`}
-                    />
-                    {xdrParseError && (
-                      <p className="text-xs text-red-600 font-semibold mt-1">
-                        {xdrParseError}
-                      </p>
-                    )}
-                  </div>
-                  {/* Auto-populated fields from auth entry (read-only) */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">
-                        Session ID (auto-filled)
-                      </label>
-                      <input
-                        type="text"
-                        value={importSessionId}
-                        readOnly
-                        placeholder="Auto-filled from auth entry"
-                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">
-                        Player 1 Points (auto-filled)
-                      </label>
-                      <input
-                        type="text"
-                        value={importPlayer1Points}
-                        readOnly
-                        placeholder="Auto-filled from auth entry"
-                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs text-gray-600 cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">
-                      Player 1 Address (auto-filled)
-                    </label>
-                    <input
-                      type="text"
-                      value={importPlayer1}
-                      readOnly
-                      placeholder="Auto-filled from auth entry"
-                      className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
-                    />
-                  </div>
-                  {/* User inputs */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">
-                        Player 2 (You)
-                      </label>
-                      <input
-                        type="text"
-                        value={userAddress}
-                        readOnly
-                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">
-                        Your Points *
-                      </label>
-                      <input
-                        type="text"
-                        value={importPlayer2Points}
-                        onChange={(e) => setImportPlayer2Points(e.target.value)}
-                        placeholder="e.g., 0.1"
-                        className="w-full px-4 py-2 rounded-xl bg-white border-2 border-blue-200 focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleImportTransaction}
-                disabled={
-                  isBusy ||
-                  !importAuthEntryXDR.trim() ||
-                  !importPlayer2Points.trim()
-                }
-                className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-600 hover:via-cyan-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
-              >
-                {loading
-                  ? "Importing & Signing..."
-                  : "Import & Sign Auth Entry"}
-              </button>
-            </div>
-          ) : createMode === "load" ? (
-            /* LOAD EXISTING GAME MODE */
-            <div className="space-y-4">
-              <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
-                <p className="text-sm font-semibold text-green-800 mb-2">
-                  🎮 Load Existing Game by Session ID
-                </p>
-                <p className="text-xs text-gray-700 mb-4">
-                  Enter a session ID to load and continue an existing game. You
-                  must be one of the players.
-                </p>
-                <input
-                  type="text"
-                  value={loadSessionId}
-                  onChange={(e) => setLoadSessionId(e.target.value)}
-                  placeholder="Enter session ID (e.g., 123456789)"
-                  className="w-full px-4 py-3 rounded-xl bg-white border-2 border-green-200 focus:outline-none focus:border-green-400 focus:ring-4 focus:ring-green-100 text-sm font-mono"
-                />
-              </div>
-
-              <div className="p-4 bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl">
-                <p className="text-xs font-bold text-yellow-800 mb-2">
-                  Requirements
-                </p>
-                <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
-                  <li>You must be Player 1 or Player 2 in the game</li>
-                  <li>Game must be active (not completed)</li>
-                  <li>Valid session ID from an existing game</li>
-                </ul>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  onClick={handleLoadExistingGame}
-                  disabled={isBusy || !loadSessionId.trim()}
-                  className="py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
-                >
-                  {loading ? "Loading..." : "🎮 Load Game"}
-                </button>
-                <button
-                  onClick={copyShareGameUrlWithSessionId}
-                  disabled={!loadSessionId.trim()}
-                  className="py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
-                >
-                  {shareUrlCopied ? "✓ Copied!" : "🔗 Share Game"}
-                </button>
-              </div>
-              <p className="text-xs text-gray-600 text-center font-semibold">
-                Load the game to continue playing, or share the URL with another
-                player
-              </p>
-            </div>
-          ) : null}
-        </div>
-      )}
-      {/* GUESS PHASE */}
-      {gamePhase === "guess" && gameState && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div
-              className={`p-5 rounded-xl border-2 ${isPlayer1 ? "border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg" : "border-gray-200 bg-white"}`}
-            >
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
-                Player 1
-              </div>
-              <div className="font-mono text-sm font-semibold mb-2 text-gray-800">
-                {gameState.player1.slice(0, 8)}...{gameState.player1.slice(-4)}
-              </div>
-              <div className="text-xs font-semibold text-gray-600">
-                Points:{" "}
-                {(Number(gameState.player1_points) / 10000000).toFixed(2)}
-              </div>
-              <div className="mt-3">
-                {gameState.player1_guess !== null &&
-                gameState.player1_guess !== undefined ? (
-                  <div className="inline-block px-3 py-1 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold shadow-md">
-                    ✓ Guessed
-                  </div>
-                ) : (
-                  <div className="inline-block px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-xs font-bold">
-                    Waiting...
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div
-              className={`p-5 rounded-xl border-2 ${isPlayer2 ? "border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg" : "border-gray-200 bg-white"}`}
-            >
-              <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
-                Player 2
-              </div>
-              <div className="font-mono text-sm font-semibold mb-2 text-gray-800">
-                {gameState.player2.slice(0, 8)}...{gameState.player2.slice(-4)}
-              </div>
-              <div className="text-xs font-semibold text-gray-600">
-                Points:{" "}
-                {(Number(gameState.player2_points) / 10000000).toFixed(2)}
-              </div>
-              <div className="mt-3">
-                {gameState.player2_guess !== null &&
-                gameState.player2_guess !== undefined ? (
-                  <div className="inline-block px-3 py-1 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold shadow-md">
-                    ✓ Guessed
-                  </div>
-                ) : (
-                  <div className="inline-block px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-xs font-bold">
-                    Waiting...
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {(isPlayer1 || isPlayer2) && !hasGuessed && (
-            <div className="space-y-4">
-              <label className="block text-sm font-bold text-gray-700">
-                Make Your Guess (1-10)
-              </label>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => setGuess(num)}
-                    className={`p-4 rounded-xl border-2 font-black text-xl transition-all ${
-                      guess === num
-                        ? "border-purple-500 bg-gradient-to-br from-purple-500 to-pink-500 text-white scale-110 shadow-2xl"
-                        : "border-gray-200 bg-white hover:border-purple-300 hover:shadow-lg hover:scale-105"
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={handleMakeGuess}
-                disabled={isBusy || guess === null}
-                className="w-full mt-2.5 py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 hover:from-purple-600 hover:via-pink-600 hover:to-red-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
-              >
-                {loading ? "Submitting..." : "Submit Guess"}
-              </button>
-            </div>
-          )}
-
-          {hasGuessed && (
-            <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl">
-              <p className="text-sm font-semibold text-blue-700">
-                ✓ You've made your guess. Waiting for other player...
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-      {/* REVEAL PHASE */}
-      {gamePhase === "reveal" && gameState && (
-        <div className="space-y-6">
-          <div className="p-8 bg-gradient-to-br from-yellow-50 via-orange-50 to-amber-50 border-2 border-yellow-300 rounded-2xl text-center shadow-xl">
-            <div className="text-6xl mb-4">🎊</div>
-            <h3 className="text-2xl font-black text-gray-900 mb-3">
-              Both Players Have Guessed!
-            </h3>
-            <p className="text-sm font-semibold text-gray-700 mb-6">
-              Click below to reveal the winner
-            </p>
-            <button
-              onClick={handleRevealWinner}
-              disabled={isBusy}
-              className="px-10 py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-yellow-500 via-orange-500 to-amber-500 hover:from-yellow-600 hover:via-orange-600 hover:to-amber-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
-            >
-              {loading ? "Revealing..." : "Reveal Winner"}
-            </button>
-          </div>
-        </div>
-      )}
-      {/* COMPLETE PHASE */}
-      {gamePhase === "complete" && gameState && (
-        <div className="space-y-6">
-          <div className="p-10 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 border-2 border-green-300 rounded-2xl text-center shadow-2xl">
-            <div className="text-7xl mb-6">🏆</div>
-            <h3 className="text-3xl font-black text-gray-900 mb-4">
-              Game Complete!
-            </h3>
-            <div className="text-2xl font-black text-green-700 mb-6">
-              Winning Number: {gameState.winning_number}
-            </div>
-            <div className="space-y-3 mb-6">
-              <div className="p-4 bg-white/70 border border-green-200 rounded-xl">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
-                  Player 1
-                </p>
-                <p className="font-mono text-xs text-gray-700 mb-2">
-                  {gameState.player1.slice(0, 8)}...
-                  {gameState.player1.slice(-4)}
-                </p>
-                <p className="text-sm font-semibold text-gray-800">
-                  Guess: {gameState.player1_guess ?? "—"}
-                  {player1Distance !== null
-                    ? ` (distance ${player1Distance})`
-                    : ""}
-                </p>
-              </div>
-
-              <div className="p-4 bg-white/70 border border-green-200 rounded-xl">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">
-                  Player 2
-                </p>
-                <p className="font-mono text-xs text-gray-700 mb-2">
-                  {gameState.player2.slice(0, 8)}...
-                  {gameState.player2.slice(-4)}
-                </p>
-                <p className="text-sm font-semibold text-gray-800">
-                  Guess: {gameState.player2_guess ?? "—"}
-                  {player2Distance !== null
-                    ? ` (distance ${player2Distance})`
-                    : ""}
-                </p>
-              </div>
-            </div>
-            {gameState.winner && (
-              <div className="mt-6 p-5 bg-white border-2 border-green-200 rounded-xl shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-2">
-                  Winner
-                </p>
-                <p className="font-mono text-sm font-bold text-gray-800">
-                  {gameState.winner.slice(0, 8)}...{gameState.winner.slice(-4)}
-                </p>
-                {gameState.winner === userAddress && (
-                  <p className="mt-3 text-green-700 font-black text-lg">
-                    🎉 You won!
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleStartNewGame}
-            className="w-full py-4 rounded-xl font-bold text-gray-700 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
-          >
-            Start New Game
-          </button>
-        </div>
-      )}
     </div>
   );
 }
