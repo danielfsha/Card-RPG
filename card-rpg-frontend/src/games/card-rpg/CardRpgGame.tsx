@@ -302,6 +302,120 @@ export function CardRpgGame({
     }
   };
 
+  const handleMultiplayerReady = async () => {
+    // 1. Toggle OFF (Cancel)
+    if (isMyReady) {
+      if (isHost) {
+        setP1AuthEntryXDR(""); // Clear shared auth entry
+      }
+      setIsMyReady(false);
+      return;
+    }
+
+    // 2. Toggle ON (Ready) - Requires Signing
+    await runAction(async () => {
+      try {
+        setLoading(true);
+
+        const signer = await getContractSigner();
+        if (!signer) throw new Error("Wallet signer not available");
+
+        // Use local state or Playroom state for addresses
+        const p1Addr = player1Address || userAddress;
+        // P2 address is required for building the transaction structure, even if P1 signs only their args.
+        // We use a placeholder if P2 is not yet known? No, better to wait or use what we have.
+        // In Playroom, P2 name/address should be available.
+        const p2Addr =
+          player2Address ||
+          (players.length > 1 ? players[1].getState("address") : "") ||
+          "G..."; // Fallback potentially unsafe
+
+        if (isHost) {
+          // --- HOST (Player 1) Logic ---
+          const p1Points = parsePoints(player1Points) || BigInt(1000000); // Default 0.1 XLM
+
+          // We use p2Addr as source for simulation structure.
+          // If we don't have a real P2 address, we can use a placeholder for simulation purposes
+          // PROVIDED the contract doesn't check P2 address against P1 auth.
+          // But `start_game` likely takes `player2` arg.
+          const simulationP2 =
+            p2Addr.length > 10
+              ? p2Addr
+              : await getFundedSimulationSourceAddress([p1Addr]);
+
+          toast.loading("Signing auth entry...", { id: "sign-p1" });
+
+          // Prepare P1's auth entry
+          // Note: we pass simulationP2 as player2 argument to `prepareStartGame`.
+          // This builds `start_game(..., player2=simulationP2, ...)`
+          // P1 signs `(sessionId, p1Points)`.
+          // The transaction simulates fine.
+          // The extracted auth entry is valid for P1.
+          const authEntryXDR = await cardRpgService.prepareStartGame(
+            sessionId,
+            p1Addr,
+            simulationP2,
+            p1Points,
+            p1Points, // Placeholder P2 points (irrelevant for P1 auth)
+            signer,
+          );
+
+          console.log("P1 Signed Auth Entry:", authEntryXDR);
+          setP1AuthEntryXDR(authEntryXDR);
+
+          toast.success("Ready! Waiting for opponent...", { id: "sign-p1" });
+          setIsMyReady(true);
+        } else {
+          // --- GUEST (Player 2) Logic ---
+          if (!p1AuthEntryXDR) {
+            toast.error("Waiting for Host to be ready first");
+            return;
+          }
+
+          toast.loading("Signing & Starting Game...", { id: "sign-p2" });
+
+          const p2Points =
+            parsePoints(importPlayer2Points) ||
+            parsePoints(player1Points) ||
+            BigInt(1000000);
+
+          // Import P1's auth entry and sign P2's part
+          const fullTxXDR = await cardRpgService.importAndSignAuthEntry(
+            p1AuthEntryXDR,
+            p2Addr || userAddress, // Ensure we use my own address
+            p2Points,
+            signer,
+          );
+
+          // Submit the transaction
+          toast.loading("Submitting transaction...", { id: "sign-p2" });
+          const result = await cardRpgService.finalizeStartGame(
+            fullTxXDR,
+            p2Addr || userAddress,
+            signer,
+          );
+
+          if (result) {
+            toast.success("Game Started!", { id: "sign-p2" });
+            setIsMyReady(true);
+            setGameStarted(true); // Optimistic update
+            // Local state refresh will happen via polling
+          } else {
+            throw new Error("Transaction failed");
+          }
+        }
+      } catch (err: any) {
+        console.error("Ready Error:", err);
+        toast.error(err.message || "Failed to set ready state", {
+          id: isHost ? "sign-p1" : "sign-p2",
+        });
+        setIsMyReady(false);
+      } finally {
+        setLoading(false);
+      }
+    });
+  };
+
   const loadGameState = async () => {
     try {
       // Always fetch latest game state to avoid stale cached results after transactions.
@@ -1299,7 +1413,7 @@ export function CardRpgGame({
 
         <div className="flex justify-center">
           <button
-            onClick={() => setIsMyReady(!isMyReady)}
+            onClick={handleMultiplayerReady}
             disabled={players.length < 2 && !isMyReady}
             className={`px-8 py-4 rounded-xl font-bold text-white text-lg transition-all shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:grayscale disabled:transform-none ${
               isMyReady
