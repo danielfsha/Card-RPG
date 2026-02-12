@@ -1,38 +1,41 @@
 {
   "name": "enemy-ai-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "type": "module",
+  "description": "AI + Stellar blockchain REST API server",
+  "main": "dist/index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon",
-    "build": "tsc"
+    "dev": "tsx watch src/api/index.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
   },
-  "keywords": [],
+  "keywords": [
+    "ai",
+    "stellar",
+    "blockchain",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/body-parser": "^1.19.6",
+    "@types/body-parser": "^1.20.3",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.2.3",
-    "@types/node-fetch": "^2.6.13",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.4",
     "nodemon": "^3.1.11",
-    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@creit-tech/stellar-wallets-kit": "npm:@jsr/creit-tech__stellar-wallets-kit@2.0.0-beta.5",
-    "@stellar/stellar-sdk": "^14.4.2",
     "@ai-sdk/google": "^3.0.24",
     "ai": "^6.0.79",
-    "body-parser": "^2.2.2",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "json-rpc-2.0": "^1.7.1",
-    "serverless-http": "^4.0.0",
-    "zod": "^4.3.6"
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "@creit-tech/stellar-wallets-kit": "npm:@jsr/creit-tech__stellar-wallets-kit@2.0.0-beta.5",
+    "@stellar/stellar-sdk": "^14.4.2",
+    "zod": "^3.23.8"
   }
 }
