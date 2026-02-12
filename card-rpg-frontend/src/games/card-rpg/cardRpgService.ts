@@ -437,8 +437,8 @@ export class CardRpgService {
       publicKey: player2Address, // Player 2 is the transaction source
     });
 
-    let tx;
-    let retries = 3;
+    let tx: any | undefined;
+    let retries = 5;
     let lastError;
 
     while (retries > 0) {
@@ -446,6 +446,13 @@ export class CardRpgService {
         console.log(
           `[importAndSignAuthEntry] Building/Simulating transaction (attempts left: ${retries})...`,
         );
+
+        // Add random jitter to avoid synchronized retry storms
+        if (retries < 5) {
+          const jitter = Math.floor(Math.random() * 2000) + 500;
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+        }
+
         tx = await buildClient.start_game(
           {
             session_id: gameParams.sessionId,
@@ -458,7 +465,6 @@ export class CardRpgService {
         );
 
         // If we got here, simulation request succeeded (network-wise).
-        // But validation might have failed in the simulation result.
         break;
       } catch (err: any) {
         lastError = err;
@@ -477,7 +483,6 @@ export class CardRpgService {
           console.log(
             "[importAndSignAuthEntry] Detected nonce/auth error, retrying...",
           );
-          await new Promise((resolve) => setTimeout(resolve, 1500)); // Wait a bit
           retries--;
         } else {
           // For other errors (like invalid params), throw immediately
@@ -486,8 +491,9 @@ export class CardRpgService {
       }
     }
 
-    if (!tx && lastError) {
-      throw lastError;
+    if (!tx) {
+      if (lastError) throw lastError;
+      throw new Error("Failed to build transaction for importAndSignAuthEntry");
     }
 
     // NOTE: Contract methods automatically simulate - no need to call tx.simulate() again!
@@ -496,15 +502,15 @@ export class CardRpgService {
     console.log("[importAndSignAuthEntry] Transaction built and simulated");
     console.log(
       "[importAndSignAuthEntry] Has simulation data:",
-      !!tx.simulationData,
+      !!tx?.simulationData,
     );
     console.log(
       "[importAndSignAuthEntry] Has result:",
-      !!tx.simulationData?.result,
+      !!tx?.simulationData?.result,
     );
     console.log(
       "[importAndSignAuthEntry] Has auth entries:",
-      !!tx.simulationData?.result?.auth,
+      !!tx?.simulationData?.result?.auth,
     );
 
     if (tx.simulationData?.result?.auth) {
