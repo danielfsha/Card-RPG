@@ -1,4 +1,4 @@
-import {
+const {
   Keypair,
   Contract,
   TransactionBuilder,
@@ -7,9 +7,9 @@ import {
   Address,
   authorizeEntry,
   TimeoutInfinite,
-} from "@stellar/stellar-sdk";
+} = require("@stellar/stellar-sdk");
 
-export interface GameParams {
+interface GameParams {
   sessionId: number;
   player1: string;
   player1Points: bigint;
@@ -19,7 +19,7 @@ export interface GameParams {
 /**
  * Parse a signed auth entry to extract game parameters
  */
-export function parseAuthEntry(authEntryXdr: string): GameParams {
+function parseAuthEntry(authEntryXdr: string): GameParams {
   try {
     const authEntry = xdr.SorobanAuthorizationEntry.fromXDR(
       authEntryXdr,
@@ -69,7 +69,7 @@ export function parseAuthEntry(authEntryXdr: string): GameParams {
   }
 }
 
-export interface ImportSignResult {
+interface ImportSignResult {
   status: string;
   hash: string;
   params: {
@@ -79,7 +79,7 @@ export interface ImportSignResult {
   };
 }
 
-export async function processImportAndSign(
+async function processImportAndSign(
   authEntryXDR: string,
   player2Points: string,
   contractId: string,
@@ -197,7 +197,7 @@ export async function processImportAndSign(
         // authorizeEntry helper handles expiration and signing
         const signedEntry = await authorizeEntry(
           entry,
-          async (preimage) => {
+          async (preimage: any) => {
             // Ensure preimage is a Buffer before signing
             const preimageBuffer = Buffer.isBuffer(preimage)
               ? preimage
@@ -271,3 +271,5 @@ export async function processImportAndSign(
     },
   };
 }
+
+export { parseAuthEntry, processImportAndSign };
