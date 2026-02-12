@@ -228,6 +228,43 @@ export function CardRpgGame({
     }
   }, [createMode, importPlayer2Points]);
 
+  // Handle reset/new game triggered by Host (Multiplayer Sync)
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    // Check if session ID changed
+    if (gameMode === "multi" && sessionId !== prevSessionIdRef.current) {
+      console.log(
+        `[Multiplayer] Session ID changed: ${prevSessionIdRef.current} -> ${sessionId}. Resetting game state.`,
+      );
+
+      // Reset to "create" phase (Setup Screen)
+      setGamePhase("create");
+      setGameState(null);
+      setGuess(null);
+      setError(null);
+      setSuccess(null);
+
+      // Reset Setup Form
+      setCreateMode("create");
+      setExportedAuthEntryXDR(null);
+      setImportAuthEntryXDR("");
+      setImportSessionId("");
+      setImportPlayer1("");
+      setImportPlayer1Points("");
+      setImportPlayer2Points(DEFAULT_POINTS);
+      setLoadSessionId("");
+
+      // Reset other UI states
+      setAuthEntryCopied(false);
+      setShareUrlCopied(false);
+      setXdrParsing(false);
+      setXdrParseError(null);
+      setXdrParseSuccess(false);
+
+      prevSessionIdRef.current = sessionId;
+    }
+  }, [sessionId, gameMode]);
+
   const POINTS_DECIMALS = 7;
   const isBusy = loading || quickstartLoading;
   const actionLock = useRef(false);
