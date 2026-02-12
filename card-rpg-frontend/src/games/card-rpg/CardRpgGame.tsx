@@ -1317,7 +1317,6 @@ export function CardRpgGame({
         handleRevealWinner={handleRevealWinner}
         handleStartNewGame={handleStartNewGame}
       />
-
     </div>
   );
 }

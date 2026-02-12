@@ -5,7 +5,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import { generateText } from "ai";
-import { processImportAndSign } from "../utils/stellar";
+import { processImportAndSign } from "../utils/stellar.js";
 
 const AI_GATEWAY_API_KEY = process.env.AI_GATEWAY_API_KEY;
 if (!AI_GATEWAY_API_KEY) {
@@ -23,7 +23,7 @@ const NETWORK_PASSPHRASE =
   process.env.NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
 // Default to the known deployed contract ID if not provided
 const DEFAULT_CONTRACT_ID =
-  process.env.CARD_RPG_CONTRACT_ID ||
+  process.env.CONTRACT_ID ||
   "CDWXRWNVCBVQ5KSUSGVFKM6VCPFB2OXQCNFPN242J2XNPI5UCQU2UBFW";
 
 console.log("API key loaded");
@@ -71,18 +71,10 @@ app.post("/api/import-sign-auth-key", async (req, res) => {
       contractId,
       AI_WALLET_SECRET,
       RPC_URL,
-      NETWORK_PASSPHRASE
+      NETWORK_PASSPHRASE,
     );
 
     res.json(result);
-  } catch (error: any) {
-    console.error("Error in import-sign-auth-key:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      details: error.message,
-    });
-  }
-});
   } catch (error: any) {
     console.error("Error in import-sign-auth-key:", error);
     res.status(500).json({
