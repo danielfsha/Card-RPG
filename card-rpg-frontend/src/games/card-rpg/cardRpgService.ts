@@ -1,10 +1,23 @@
-import { Client as CardRpgClient, type Game } from './bindings';
-import { NETWORK_PASSPHRASE, RPC_URL, DEFAULT_METHOD_OPTIONS, DEFAULT_AUTH_TTL_MINUTES, MULTI_SIG_AUTH_TTL_MINUTES } from '@/utils/constants';
-import { contract, TransactionBuilder, StrKey, xdr, Address, authorizeEntry } from '@stellar/stellar-sdk';
-import { Buffer } from 'buffer';
-import { signAndSendViaLaunchtube } from '@/utils/transactionHelper';
-import { calculateValidUntilLedger } from '@/utils/ledgerUtils';
-import { injectSignedAuthEntry } from '@/utils/authEntryUtils';
+import { Client as CardRpgClient, type Game } from "./bindings";
+import {
+  NETWORK_PASSPHRASE,
+  RPC_URL,
+  DEFAULT_METHOD_OPTIONS,
+  DEFAULT_AUTH_TTL_MINUTES,
+  MULTI_SIG_AUTH_TTL_MINUTES,
+} from "@/utils/constants";
+import {
+  contract,
+  TransactionBuilder,
+  StrKey,
+  xdr,
+  Address,
+  authorizeEntry,
+} from "@stellar/stellar-sdk";
+import { Buffer } from "buffer";
+import { signAndSendViaLaunchtube } from "@/utils/transactionHelper";
+import { calculateValidUntilLedger } from "@/utils/ledgerUtils";
+import { injectSignedAuthEntry } from "@/utils/authEntryUtils";
 
 type ClientOptions = contract.ClientOptions;
 
@@ -30,7 +43,7 @@ export class CardRpgService {
    */
   private createSigningClient(
     publicKey: string,
-    signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
   ): CardRpgClient {
     const options: ClientOptions = {
       contractId: this.contractId,
@@ -56,12 +69,12 @@ export class CardRpgService {
         return result.result.unwrap();
       } else {
         // Game doesn't exist or contract returned error
-        console.log('[getGame] Game not found for session:', sessionId);
+        console.log("[getGame] Game not found for session:", sessionId);
         return null;
       }
     } catch (err) {
       // Simulation or contract call failed
-      console.log('[getGame] Error querying game:', err);
+      console.log("[getGame] Error querying game:", err);
       return null;
     }
   }
@@ -76,17 +89,20 @@ export class CardRpgService {
     player2: string,
     player1Points: bigint,
     player2Points: bigint,
-    signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
   ) {
     const client = this.createSigningClient(player1, signer);
-    const tx = await client.start_game({
-      session_id: sessionId,
-      player1,
-      player2,
-      player1_points: player1Points,
-      player2_points: player2Points,
-    }, DEFAULT_METHOD_OPTIONS);
+    const tx = await client.start_game(
+      {
+        session_id: sessionId,
+        player1,
+        player2,
+        player1_points: player1Points,
+        player2_points: player2Points,
+      },
+      DEFAULT_METHOD_OPTIONS,
+    );
 
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
@@ -95,7 +111,7 @@ export class CardRpgService {
     const sentTx = await signAndSendViaLaunchtube(
       tx,
       DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
-      validUntilLedgerSeq
+      validUntilLedgerSeq,
     );
     return sentTx.result;
   }
@@ -117,8 +133,11 @@ export class CardRpgService {
     player2: string,
     player1Points: bigint,
     player2Points: bigint,
-    player1Signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    player1Signer: Pick<
+      contract.ClientOptions,
+      "signTransaction" | "signAuthEntry"
+    >,
+    authTtlMinutes?: number,
   ): Promise<string> {
     // Step 1: Build transaction with Player 2 as the source (no signing capabilities needed yet)
     const buildClient = new CardRpgClient({
@@ -128,51 +147,74 @@ export class CardRpgService {
       publicKey: player2, // Player 2 is the transaction source
     });
 
-    const tx = await buildClient.start_game({
-      session_id: sessionId,
-      player1,
-      player2,
-      player1_points: player1Points,
-      player2_points: player2Points,
-    }, DEFAULT_METHOD_OPTIONS);
+    const tx = await buildClient.start_game(
+      {
+        session_id: sessionId,
+        player1,
+        player2,
+        player1_points: player1Points,
+        player2_points: player2Points,
+      },
+      DEFAULT_METHOD_OPTIONS,
+    );
     // NOTE: Contract methods automatically simulate - no need to call tx.simulate() again!
-    console.log('[prepareStartGame] Transaction built and simulated, extracting auth entries');
+    console.log(
+      "[prepareStartGame] Transaction built and simulated, extracting auth entries",
+    );
 
     // Step 2: Extract Player 1's STUBBED auth entry from simulation
     if (!tx.simulationData?.result?.auth) {
-      throw new Error('No auth entries found in simulation');
+      throw new Error("No auth entries found in simulation");
     }
 
     const authEntries = tx.simulationData.result.auth;
-    console.log('[prepareStartGame] Found', authEntries.length, 'auth entries in simulation');
+    console.log(
+      "[prepareStartGame] Found",
+      authEntries.length,
+      "auth entries in simulation",
+    );
 
     // Find Player 1's stubbed auth entry
     let player1AuthEntry = null;
 
-    console.log('[prepareStartGame] Looking for auth entry for Player 1:', player1);
+    console.log(
+      "[prepareStartGame] Looking for auth entry for Player 1:",
+      player1,
+    );
 
     for (let i = 0; i < authEntries.length; i++) {
       const entry = authEntries[i];
       try {
         const entryAddress = entry.credentials().address().address();
-        const entryAddressString = Address.fromScAddress(entryAddress).toString();
+        const entryAddressString =
+          Address.fromScAddress(entryAddress).toString();
 
-        console.log(`[prepareStartGame] Auth entry ${i} address:`, entryAddressString);
+        console.log(
+          `[prepareStartGame] Auth entry ${i} address:`,
+          entryAddressString,
+        );
 
         // Compare string addresses instead of using .equals() which doesn't exist on ScAddress
         if (entryAddressString === player1) {
           player1AuthEntry = entry;
-          console.log(`[prepareStartGame] Found Player 1 auth entry at index ${i}`);
+          console.log(
+            `[prepareStartGame] Found Player 1 auth entry at index ${i}`,
+          );
           break;
         }
       } catch (err) {
-        console.log(`[prepareStartGame] Auth entry ${i} doesn't have address credentials:`, err);
+        console.log(
+          `[prepareStartGame] Auth entry ${i} doesn't have address credentials:`,
+          err,
+        );
         continue;
       }
     }
 
     if (!player1AuthEntry) {
-      throw new Error(`No auth entry found for Player 1 (${player1}). Found ${authEntries.length} auth entries in simulation - check console logs for details.`);
+      throw new Error(
+        `No auth entry found for Player 1 (${player1}). Found ${authEntries.length} auth entries in simulation - check console logs for details.`,
+      );
     }
 
     // Step 4: Calculate extended TTL for multi-sig flow
@@ -182,49 +224,58 @@ export class CardRpgService {
 
     // Step 5: Sign the auth entry using authorizeEntry helper
     // This properly handles the signature generation and auth entry reconstruction
-    console.log('[prepareStartGame] Signing Player 1 auth entry with expiration:', validUntilLedgerSeq);
+    console.log(
+      "[prepareStartGame] Signing Player 1 auth entry with expiration:",
+      validUntilLedgerSeq,
+    );
 
     if (!player1Signer.signAuthEntry) {
-      throw new Error('signAuthEntry function not available');
+      throw new Error("signAuthEntry function not available");
     }
 
     // Use authorizeEntry to handle the full signing process
     // This is the proper way to sign auth entries according to stellar-sdk
     const signedAuthEntry = await authorizeEntry(
-      player1AuthEntry,  // The stubbed entry from simulation (with void signature)
+      player1AuthEntry, // The stubbed entry from simulation (with void signature)
       async (preimage) => {
         // The preimage is what needs to be signed
         // Call wallet to sign the preimage hash
-        console.log('[prepareStartGame] Signing preimage with wallet...');
+        console.log("[prepareStartGame] Signing preimage with wallet...");
 
         if (!player1Signer.signAuthEntry) {
-          throw new Error('Wallet does not support auth entry signing');
+          throw new Error("Wallet does not support auth entry signing");
         }
 
         const signResult = await player1Signer.signAuthEntry(
-          preimage.toXDR('base64'),  // Preimage as base64 XDR
+          preimage.toXDR("base64"), // Preimage as base64 XDR
           {
             networkPassphrase: NETWORK_PASSPHRASE,
             address: player1,
-          }
+          },
         );
 
         if (signResult.error) {
-          throw new Error(`Failed to sign auth entry: ${signResult.error.message}`);
+          throw new Error(
+            `Failed to sign auth entry: ${signResult.error.message}`,
+          );
         }
 
-        console.log('[prepareStartGame] Got signature from wallet');
+        console.log("[prepareStartGame] Got signature from wallet");
 
         // Return signature as Buffer (authorizeEntry expects a Buffer)
-        return Buffer.from(signResult.signedAuthEntry, 'base64');
+        return Buffer.from(signResult.signedAuthEntry, "base64");
       },
-      validUntilLedgerSeq,  // Signature expiration ledger
+      validUntilLedgerSeq, // Signature expiration ledger
       NETWORK_PASSPHRASE,
     );
 
     // authorizeEntry returns the fully reconstructed auth entry with the signature
-    const signedAuthEntryXdr = signedAuthEntry.toXDR('base64');
-    console.log('[prepareStartGame] ✅ Successfully signed and exported Player 1 auth entry XDR (length:', signedAuthEntryXdr.length, ')');
+    const signedAuthEntryXdr = signedAuthEntry.toXDR("base64");
+    console.log(
+      "[prepareStartGame] ✅ Successfully signed and exported Player 1 auth entry XDR (length:",
+      signedAuthEntryXdr.length,
+      ")",
+    );
     return signedAuthEntryXdr;
   }
 
@@ -244,37 +295,48 @@ export class CardRpgService {
   } {
     try {
       // Parse the auth entry from XDR
-      const authEntry = xdr.SorobanAuthorizationEntry.fromXDR(authEntryXdr, 'base64');
+      const authEntry = xdr.SorobanAuthorizationEntry.fromXDR(
+        authEntryXdr,
+        "base64",
+      );
 
-      console.log('[parseAuthEntry] Parsed auth entry from XDR');
+      console.log("[parseAuthEntry] Parsed auth entry from XDR");
 
       // Extract Player 1's address from credentials
       const credentials = authEntry.credentials();
-      console.log('[parseAuthEntry] Credentials type:', credentials.switch().name);
+      console.log(
+        "[parseAuthEntry] Credentials type:",
+        credentials.switch().name,
+      );
 
       const addressCreds = credentials.address();
       const player1Address = addressCreds.address();
       const player1 = Address.fromScAddress(player1Address).toString();
-      console.log('[parseAuthEntry] Player 1 address:', player1);
+      console.log("[parseAuthEntry] Player 1 address:", player1);
 
       // Get the root invocation
       const rootInvocation = authEntry.rootInvocation();
-      console.log('[parseAuthEntry] Got root invocation');
+      console.log("[parseAuthEntry] Got root invocation");
 
       // Get the authorized function
       const authorizedFunction = rootInvocation.function();
-      console.log('[parseAuthEntry] Authorized function type:', authorizedFunction.switch().name);
+      console.log(
+        "[parseAuthEntry] Authorized function type:",
+        authorizedFunction.switch().name,
+      );
 
       // Extract the contract function invocation
       const contractFn = authorizedFunction.contractFn();
-      console.log('[parseAuthEntry] Got contract function');
+      console.log("[parseAuthEntry] Got contract function");
 
       // Get function name and args
       const functionName = contractFn.functionName().toString();
-      console.log('[parseAuthEntry] Function name:', functionName);
+      console.log("[parseAuthEntry] Function name:", functionName);
 
-      if (functionName !== 'start_game') {
-        throw new Error(`Unexpected function: ${functionName}. Expected start_game.`);
+      if (functionName !== "start_game") {
+        throw new Error(
+          `Unexpected function: ${functionName}. Expected start_game.`,
+        );
       }
 
       // Extract arguments from the invocation
@@ -282,16 +344,18 @@ export class CardRpgService {
       // 0: session_id (u32)
       // 1: player_points (i128)
       const args = contractFn.args();
-      console.log('[parseAuthEntry] Number of args:', args.length);
+      console.log("[parseAuthEntry] Number of args:", args.length);
 
       if (args.length !== 2) {
-        throw new Error(`Expected 2 arguments for start_game auth entry, got ${args.length}`);
+        throw new Error(
+          `Expected 2 arguments for start_game auth entry, got ${args.length}`,
+        );
       }
 
       const sessionId = args[0].u32();
       const player1Points = args[1].i128().lo().toBigInt();
 
-      console.log('[parseAuthEntry] Extracted:', {
+      console.log("[parseAuthEntry] Extracted:", {
         sessionId,
         player1,
         player1Points: player1Points.toString(),
@@ -304,7 +368,7 @@ export class CardRpgService {
         functionName,
       };
     } catch (err: any) {
-      console.error('[parseAuthEntry] Error parsing auth entry:', err);
+      console.error("[parseAuthEntry] Error parsing auth entry:", err);
       throw new Error(`Failed to parse auth entry: ${err.message}`);
     }
   }
@@ -330,28 +394,38 @@ export class CardRpgService {
     player1SignedAuthEntryXdr: string,
     player2Address: string,
     player2Points: bigint,
-    player2Signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    player2Signer: Pick<
+      contract.ClientOptions,
+      "signTransaction" | "signAuthEntry"
+    >,
+    authTtlMinutes?: number,
   ): Promise<string> {
-    console.log('[importAndSignAuthEntry] Parsing Player 1 signed auth entry...');
+    console.log(
+      "[importAndSignAuthEntry] Parsing Player 1 signed auth entry...",
+    );
 
     // Parse the auth entry to extract game parameters
     const gameParams = this.parseAuthEntry(player1SignedAuthEntryXdr);
 
-    console.log('[importAndSignAuthEntry] Parsed game parameters:', {
+    console.log("[importAndSignAuthEntry] Parsed game parameters:", {
       sessionId: gameParams.sessionId,
       player1: gameParams.player1,
       player1Points: gameParams.player1Points.toString(),
     });
 
-    console.log('[importAndSignAuthEntry] Rebuilding transaction with Player 2 params:', {
-      player2: player2Address,
-      player2Points: player2Points.toString(),
-    });
+    console.log(
+      "[importAndSignAuthEntry] Rebuilding transaction with Player 2 params:",
+      {
+        player2: player2Address,
+        player2Points: player2Points.toString(),
+      },
+    );
 
     // Validation: Prevent self-play at service layer
     if (player2Address === gameParams.player1) {
-      throw new Error('Cannot play against yourself. Player 2 must be different from Player 1.');
+      throw new Error(
+        "Cannot play against yourself. Player 2 must be different from Player 1.",
+      );
     }
 
     // Step 1: Build a new transaction with Player 2 as the source
@@ -363,34 +437,98 @@ export class CardRpgService {
       publicKey: player2Address, // Player 2 is the transaction source
     });
 
-    const tx = await buildClient.start_game({
-      session_id: gameParams.sessionId,
-      player1: gameParams.player1,        // From auth entry
-      player2: player2Address,             // Provided by Player 2
-      player1_points: gameParams.player1Points, // From auth entry
-      player2_points: player2Points,         // Provided by Player 2
-    }, DEFAULT_METHOD_OPTIONS);
+    let tx;
+    let retries = 3;
+    let lastError;
+
+    while (retries > 0) {
+      try {
+        console.log(
+          `[importAndSignAuthEntry] Building/Simulating transaction (attempts left: ${retries})...`,
+        );
+        tx = await buildClient.start_game(
+          {
+            session_id: gameParams.sessionId,
+            player1: gameParams.player1, // From auth entry
+            player2: player2Address, // Provided by Player 2
+            player1_points: gameParams.player1Points, // From auth entry
+            player2_points: player2Points, // Provided by Player 2
+          },
+          DEFAULT_METHOD_OPTIONS,
+        );
+
+        // If we got here, simulation request succeeded (network-wise).
+        // But validation might have failed in the simulation result.
+        break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(
+          "[importAndSignAuthEntry] Simulation failed:",
+          err.message,
+        );
+
+        // Check for specific "nonce already exists" error or other transient errors
+        if (
+          err.message &&
+          (err.message.includes("nonce already exists") ||
+            err.message.includes("Auth, ExistingValue") ||
+            err.message.includes("HostError"))
+        ) {
+          console.log(
+            "[importAndSignAuthEntry] Detected nonce/auth error, retrying...",
+          );
+          await new Promise((resolve) => setTimeout(resolve, 1500)); // Wait a bit
+          retries--;
+        } else {
+          // For other errors (like invalid params), throw immediately
+          throw err;
+        }
+      }
+    }
+
+    if (!tx && lastError) {
+      throw lastError;
+    }
+
     // NOTE: Contract methods automatically simulate - no need to call tx.simulate() again!
 
     // Log simulation data to understand what we have
-    console.log('[importAndSignAuthEntry] Transaction built and simulated');
-    console.log('[importAndSignAuthEntry] Has simulation data:', !!tx.simulationData);
-    console.log('[importAndSignAuthEntry] Has result:', !!tx.simulationData?.result);
-    console.log('[importAndSignAuthEntry] Has auth entries:', !!tx.simulationData?.result?.auth);
+    console.log("[importAndSignAuthEntry] Transaction built and simulated");
+    console.log(
+      "[importAndSignAuthEntry] Has simulation data:",
+      !!tx.simulationData,
+    );
+    console.log(
+      "[importAndSignAuthEntry] Has result:",
+      !!tx.simulationData?.result,
+    );
+    console.log(
+      "[importAndSignAuthEntry] Has auth entries:",
+      !!tx.simulationData?.result?.auth,
+    );
 
     if (tx.simulationData?.result?.auth) {
       const authEntries = tx.simulationData.result.auth;
-      console.log(`[importAndSignAuthEntry] Found ${authEntries.length} auth entries in simulation:`);
+      console.log(
+        `[importAndSignAuthEntry] Found ${authEntries.length} auth entries in simulation:`,
+      );
       for (let i = 0; i < authEntries.length; i++) {
         try {
           const entry = authEntries[i];
           const credentialType = entry.credentials().switch().name;
 
-          if (credentialType === 'sorobanCredentialsAddress') {
+          if (credentialType === "sorobanCredentialsAddress") {
             const entryAddress = entry.credentials().address().address();
-            const entryAddressString = Address.fromScAddress(entryAddress).toString();
-            const signatureType = entry.credentials().address().signature().switch().name;
-            console.log(`  [${i}] ${entryAddressString} - signature: ${signatureType}`);
+            const entryAddressString =
+              Address.fromScAddress(entryAddress).toString();
+            const signatureType = entry
+              .credentials()
+              .address()
+              .signature()
+              .switch().name;
+            console.log(
+              `  [${i}] ${entryAddressString} - signature: ${signatureType}`,
+            );
           } else {
             console.log(`  [${i}] ${credentialType}`);
           }
@@ -399,7 +537,9 @@ export class CardRpgService {
         }
       }
     } else {
-      console.log('[importAndSignAuthEntry] ⚠️ No auth entries in simulation data!');
+      console.log(
+        "[importAndSignAuthEntry] ⚠️ No auth entries in simulation data!",
+      );
     }
     console.log();
 
@@ -413,26 +553,34 @@ export class CardRpgService {
       player1SignedAuthEntryXdr,
       player2Address,
       player2Signer,
-      validUntilLedgerSeq
+      validUntilLedgerSeq,
     );
-    console.log('[importAndSignAuthEntry] Injected Player 1 signed auth entry');
+    console.log("[importAndSignAuthEntry] Injected Player 1 signed auth entry");
 
     // Step 4: Create a signing client and import the transaction
-    const player2Client = this.createSigningClient(player2Address, player2Signer);
+    const player2Client = this.createSigningClient(
+      player2Address,
+      player2Signer,
+    );
     const player2Tx = player2Client.txFromXDR(txWithInjectedAuth.toXDR());
 
     // Step 5: Check if Player 2 needs to sign an auth entry
     const needsSigning = await player2Tx.needsNonInvokerSigningBy();
-    console.log('[importAndSignAuthEntry] Accounts that still need to sign auth entries:', needsSigning);
+    console.log(
+      "[importAndSignAuthEntry] Accounts that still need to sign auth entries:",
+      needsSigning,
+    );
 
     // Player 2 signs their auth entry if they're in the needsSigning list
     if (needsSigning.includes(player2Address)) {
-      console.log('[importAndSignAuthEntry] Signing Player 2 auth entry');
+      console.log("[importAndSignAuthEntry] Signing Player 2 auth entry");
       await player2Tx.signAuthEntries({ expiration: validUntilLedgerSeq });
     }
 
     // Export full transaction XDR (with both auth entries signed)
-    console.log('[importAndSignAuthEntry] Returning full transaction XDR ready for submission');
+    console.log(
+      "[importAndSignAuthEntry] Returning full transaction XDR ready for submission",
+    );
     return player2Tx.toXDR();
   }
 
@@ -447,8 +595,8 @@ export class CardRpgService {
   async finalizeStartGame(
     xdr: string,
     signerAddress: string,
-    signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
   ) {
     const client = this.createSigningClient(signerAddress, signer);
 
@@ -467,7 +615,7 @@ export class CardRpgService {
     const sentTx = await signAndSendViaLaunchtube(
       tx,
       DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
-      validUntilLedgerSeq
+      validUntilLedgerSeq,
     );
     return sentTx.result;
   }
@@ -478,7 +626,7 @@ export class CardRpgService {
    */
   async checkRequiredSignatures(
     xdr: string,
-    publicKey: string
+    publicKey: string,
   ): Promise<string[]> {
     const client = this.createSigningClient(publicKey, {
       signTransaction: async (xdr: string) => ({ signedTxXdr: xdr }),
@@ -510,13 +658,13 @@ export class CardRpgService {
     const transaction = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
 
     // Get the transaction source (only regular Transactions have .source, not FeeBumpTransactions)
-    const transactionSource = 'source' in transaction ? transaction.source : '';
+    const transactionSource = "source" in transaction ? transaction.source : "";
 
     // Get the first operation (should be invokeHostFunction for contract calls)
     const operation = transaction.operations[0];
 
-    if (!operation || operation.type !== 'invokeHostFunction') {
-      throw new Error('Transaction does not contain a contract invocation');
+    if (!operation || operation.type !== "invokeHostFunction") {
+      throw new Error("Transaction does not contain a contract invocation");
     }
 
     // Extract the contract invocation details
@@ -536,12 +684,16 @@ export class CardRpgService {
     // 3: player1_points (i128)
     // 4: player2_points (i128)
 
-    if (functionName !== 'start_game') {
-      throw new Error(`Unexpected function: ${functionName}. Expected start_game.`);
+    if (functionName !== "start_game") {
+      throw new Error(
+        `Unexpected function: ${functionName}. Expected start_game.`,
+      );
     }
 
     if (args.length !== 5) {
-      throw new Error(`Expected 5 arguments for start_game, got ${args.length}`);
+      throw new Error(
+        `Expected 5 arguments for start_game, got ${args.length}`,
+      );
     }
 
     // Extract session_id (u32)
@@ -582,19 +734,22 @@ export class CardRpgService {
     sessionId: number,
     playerAddress: string,
     guess: number,
-    signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
   ) {
     if (guess < 1 || guess > 10) {
-      throw new Error('Guess must be between 1 and 10');
+      throw new Error("Guess must be between 1 and 10");
     }
 
     const client = this.createSigningClient(playerAddress, signer);
-    const tx = await client.make_guess({
-      session_id: sessionId,
-      player: playerAddress,
-      guess,
-    }, DEFAULT_METHOD_OPTIONS);
+    const tx = await client.make_guess(
+      {
+        session_id: sessionId,
+        player: playerAddress,
+        guess,
+      },
+      DEFAULT_METHOD_OPTIONS,
+    );
     // NOTE: Contract methods automatically simulate - footprint is already prepared
 
     const validUntilLedgerSeq = authTtlMinutes
@@ -602,17 +757,25 @@ export class CardRpgService {
       : await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
 
     try {
-      const sentTx = await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
+      const sentTx = await signAndSendViaLaunchtube(
+        tx,
+        DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
+        validUntilLedgerSeq,
+      );
 
-      if (sentTx.getTransactionResponse?.status === 'FAILED') {
-        const errorMessage = this.extractErrorFromDiagnostics(sentTx.getTransactionResponse);
+      if (sentTx.getTransactionResponse?.status === "FAILED") {
+        const errorMessage = this.extractErrorFromDiagnostics(
+          sentTx.getTransactionResponse,
+        );
         throw new Error(`Transaction failed: ${errorMessage}`);
       }
 
       return sentTx.result;
     } catch (err) {
-      if (err instanceof Error && err.message.includes('Transaction failed!')) {
-        throw new Error('Transaction failed - check if the game is still active and you haven\'t already guessed');
+      if (err instanceof Error && err.message.includes("Transaction failed!")) {
+        throw new Error(
+          "Transaction failed - check if the game is still active and you haven't already guessed",
+        );
       }
       throw err;
     }
@@ -624,11 +787,14 @@ export class CardRpgService {
   async revealWinner(
     sessionId: number,
     callerAddress: string,
-    signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
-    authTtlMinutes?: number
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
   ) {
     const client = this.createSigningClient(callerAddress, signer);
-    const tx = await client.reveal_winner({ session_id: sessionId }, DEFAULT_METHOD_OPTIONS);
+    const tx = await client.reveal_winner(
+      { session_id: sessionId },
+      DEFAULT_METHOD_OPTIONS,
+    );
     // NOTE: Contract methods automatically simulate - footprint already includes all required storage keys
     // (reveal_winner calls the Game Hub end_game() hook)
 
@@ -637,12 +803,18 @@ export class CardRpgService {
       : await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
 
     try {
-      const sentTx = await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
+      const sentTx = await signAndSendViaLaunchtube(
+        tx,
+        DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
+        validUntilLedgerSeq,
+      );
 
       // Check transaction status before accessing result
-      if (sentTx.getTransactionResponse?.status === 'FAILED') {
+      if (sentTx.getTransactionResponse?.status === "FAILED") {
         // Extract error from diagnostic events instead of return_value
-        const errorMessage = this.extractErrorFromDiagnostics(sentTx.getTransactionResponse);
+        const errorMessage = this.extractErrorFromDiagnostics(
+          sentTx.getTransactionResponse,
+        );
         throw new Error(`Transaction failed: ${errorMessage}`);
       }
 
@@ -653,9 +825,11 @@ export class CardRpgService {
       // 2. The transaction submission failed
       // 3. The transaction is still pending after timeout
 
-      if (err instanceof Error && err.message.includes('Transaction failed!')) {
+      if (err instanceof Error && err.message.includes("Transaction failed!")) {
         // This is the SDK error when trying to access .result on a failed transaction
-        throw new Error('Transaction failed - check if both players have guessed and the game is still active');
+        throw new Error(
+          "Transaction failed - check if both players have guessed and the game is still active",
+        );
       }
 
       throw err;
@@ -668,10 +842,15 @@ export class CardRpgService {
   private extractErrorFromDiagnostics(transactionResponse: any): string {
     try {
       // Log full response for debugging
-      console.error('Transaction response:', JSON.stringify(transactionResponse, null, 2));
+      console.error(
+        "Transaction response:",
+        JSON.stringify(transactionResponse, null, 2),
+      );
 
-      const diagnosticEvents = transactionResponse?.diagnosticEventsXdr ||
-                              transactionResponse?.diagnostic_events || [];
+      const diagnosticEvents =
+        transactionResponse?.diagnosticEventsXdr ||
+        transactionResponse?.diagnostic_events ||
+        [];
 
       // Look for error events in diagnostic events
       for (const event of diagnosticEvents) {
@@ -679,14 +858,13 @@ export class CardRpgService {
           const topics = Array.isArray(event.topics) ? event.topics : [];
 
           // Check if this is an error event
-          const hasErrorTopic = topics.some((topic: any) =>
-            topic?.symbol === 'error' ||
-            topic?.error
+          const hasErrorTopic = topics.some(
+            (topic: any) => topic?.symbol === "error" || topic?.error,
           );
 
           if (hasErrorTopic && event.data) {
             // Try to extract error message from data
-            if (typeof event.data === 'string') {
+            if (typeof event.data === "string") {
               return event.data;
             } else if (event.data.vec && Array.isArray(event.data.vec)) {
               // Find string messages in the vec
@@ -694,7 +872,7 @@ export class CardRpgService {
                 .filter((item: any) => item?.string)
                 .map((item: any) => item.string);
               if (messages.length > 0) {
-                return messages.join(': ');
+                return messages.join(": ");
               }
             }
           }
@@ -703,20 +881,20 @@ export class CardRpgService {
 
       // Check for result_xdr error info
       if (transactionResponse?.result_xdr) {
-        console.error('Result XDR:', transactionResponse.result_xdr);
+        console.error("Result XDR:", transactionResponse.result_xdr);
       }
 
       // Check for error in return value
       if (transactionResponse?.returnValue) {
-        console.error('Return value:', transactionResponse.returnValue);
+        console.error("Return value:", transactionResponse.returnValue);
       }
 
       // Fallback: return status with more context
-      const status = transactionResponse?.status || 'Unknown';
+      const status = transactionResponse?.status || "Unknown";
       return `Transaction ${status}. Check console for details.`;
     } catch (err) {
-      console.error('Failed to extract error from diagnostics:', err);
-      return 'Transaction failed with unknown error';
+      console.error("Failed to extract error from diagnostics:", err);
+      return "Transaction failed with unknown error";
     }
   }
 }
