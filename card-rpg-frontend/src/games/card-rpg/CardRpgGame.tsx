@@ -303,117 +303,7 @@ export function CardRpgGame({
   };
 
   const handleMultiplayerReady = async () => {
-    // 1. Toggle OFF (Cancel)
-    if (isMyReady) {
-      if (isHost) {
-        setP1AuthEntryXDR(""); // Clear shared auth entry
-      }
-      setIsMyReady(false);
-      return;
-    }
-
-    // 2. Toggle ON (Ready) - Requires Signing
-    await runAction(async () => {
-      try {
-        setLoading(true);
-
-        const signer = await getContractSigner();
-        if (!signer) throw new Error("Wallet signer not available");
-
-        // Use local state or Playroom state for addresses
-        const p1Addr = player1Address || userAddress;
-        // P2 address is required for building the transaction structure, even if P1 signs only their args.
-        // We use a placeholder if P2 is not yet known? No, better to wait or use what we have.
-        // In Playroom, P2 name/address should be available.
-        const p2Addr =
-          player2Address ||
-          (players.length > 1 ? players[1].getState("address") : "") ||
-          "G..."; // Fallback potentially unsafe
-
-        if (isHost) {
-          // --- HOST (Player 1) Logic ---
-          const p1Points = parsePoints(player1Points) || BigInt(1000000); // Default 0.1 XLM
-
-          // We use p2Addr as source for simulation structure.
-          // If we don't have a real P2 address, we can use a placeholder for simulation purposes
-          // PROVIDED the contract doesn't check P2 address against P1 auth.
-          // But `start_game` likely takes `player2` arg.
-          const simulationP2 =
-            p2Addr.length > 10
-              ? p2Addr
-              : await getFundedSimulationSourceAddress([p1Addr]);
-
-          toast.loading("Signing auth entry...", { id: "sign-p1" });
-
-          // Prepare P1's auth entry
-          // Note: we pass simulationP2 as player2 argument to `prepareStartGame`.
-          // This builds `start_game(..., player2=simulationP2, ...)`
-          // P1 signs `(sessionId, p1Points)`.
-          // The transaction simulates fine.
-          // The extracted auth entry is valid for P1.
-          const authEntryXDR = await cardRpgService.prepareStartGame(
-            sessionId,
-            p1Addr,
-            simulationP2,
-            p1Points,
-            p1Points, // Placeholder P2 points (irrelevant for P1 auth)
-            signer,
-          );
-
-          console.log("P1 Signed Auth Entry:", authEntryXDR);
-          setP1AuthEntryXDR(authEntryXDR);
-
-          toast.success("Ready! Waiting for opponent...", { id: "sign-p1" });
-          setIsMyReady(true);
-        } else {
-          // --- GUEST (Player 2) Logic ---
-          if (!p1AuthEntryXDR) {
-            toast.error("Waiting for Host to be ready first");
-            return;
-          }
-
-          toast.loading("Signing & Starting Game...", { id: "sign-p2" });
-
-          const p2Points =
-            parsePoints(importPlayer2Points) ||
-            parsePoints(player1Points) ||
-            BigInt(1000000);
-
-          // Import P1's auth entry and sign P2's part
-          const fullTxXDR = await cardRpgService.importAndSignAuthEntry(
-            p1AuthEntryXDR,
-            p2Addr || userAddress, // Ensure we use my own address
-            p2Points,
-            signer,
-          );
-
-          // Submit the transaction
-          toast.loading("Submitting transaction...", { id: "sign-p2" });
-          const result = await cardRpgService.finalizeStartGame(
-            fullTxXDR,
-            p2Addr || userAddress,
-            signer,
-          );
-
-          if (result) {
-            toast.success("Game Started!", { id: "sign-p2" });
-            setIsMyReady(true);
-            setGameStarted(true); // Optimistic update
-            // Local state refresh will happen via polling
-          } else {
-            throw new Error("Transaction failed");
-          }
-        }
-      } catch (err: any) {
-        console.error("Ready Error:", err);
-        toast.error(err.message || "Failed to set ready state", {
-          id: isHost ? "sign-p1" : "sign-p2",
-        });
-        setIsMyReady(false);
-      } finally {
-        setLoading(false);
-      }
-    });
+    setIsMyReady(!isMyReady);
   };
 
   const loadGameState = async () => {
@@ -1490,174 +1380,194 @@ export function CardRpgGame({
       {gamePhase === "create" && (
         <div className="space-y-6">
           {/* Mode Toggle */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
-            <button
-              onClick={() => {
-                setCreateMode("create");
-                setExportedAuthEntryXDR(null);
-                setImportAuthEntryXDR("");
-                setImportSessionId("");
-                setImportPlayer1("");
-                setImportPlayer1Points("");
-                setImportPlayer2Points(DEFAULT_POINTS);
-                setLoadSessionId("");
-              }}
-              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === "create"
-                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Create & Export
-            </button>
-            <button
-              onClick={() => {
-                setCreateMode("import");
-                setExportedAuthEntryXDR(null);
-                setLoadSessionId("");
-              }}
-              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === "import"
-                  ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Import Auth Entry
-            </button>
-            <button
-              onClick={() => {
-                setCreateMode("load");
-                setExportedAuthEntryXDR(null);
-                setImportAuthEntryXDR("");
-                setImportSessionId("");
-                setImportPlayer1("");
-                setImportPlayer1Points("");
-                setImportPlayer2Points(DEFAULT_POINTS);
-              }}
-              className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
-                createMode === "load"
-                  ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Load Existing Game
-            </button>
-          </div>
-
-          <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-yellow-900">
-                  ⚡ Quickstart (Dev)
-                </p>
-                <p className="text-xs font-semibold text-yellow-800">
-                  Creates and signs for both dev wallets in one click. Works
-                  only in the Games Library.
-                </p>
-              </div>
+          {gameMode !== "multi" && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
               <button
-                onClick={handleQuickStart}
-                disabled={isBusy || !quickstartAvailable}
-                className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
+                onClick={() => {
+                  setCreateMode("create");
+                  setExportedAuthEntryXDR(null);
+                  setImportAuthEntryXDR("");
+                  setImportSessionId("");
+                  setImportPlayer1("");
+                  setImportPlayer1Points("");
+                  setImportPlayer2Points(DEFAULT_POINTS);
+                  setLoadSessionId("");
+                }}
+                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
+                  createMode === "create"
+                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
               >
-                {quickstartLoading ? "Quickstarting..." : "⚡ Quickstart Game"}
+                Create & Export
+              </button>
+              <button
+                onClick={() => {
+                  setCreateMode("import");
+                  setExportedAuthEntryXDR(null);
+                  setLoadSessionId("");
+                }}
+                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
+                  createMode === "import"
+                    ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Import Auth Entry
+              </button>
+              <button
+                onClick={() => {
+                  setCreateMode("load");
+                  setExportedAuthEntryXDR(null);
+                  setImportAuthEntryXDR("");
+                  setImportSessionId("");
+                  setImportPlayer1("");
+                  setImportPlayer1Points("");
+                  setImportPlayer2Points(DEFAULT_POINTS);
+                }}
+                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
+                  createMode === "load"
+                    ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Load Existing Game
               </button>
             </div>
-          </div>
+          )}
 
-          {createMode === "create" ? (
-            <div className="space-y-6">
-              <div className="space-y-4">
+          {gameMode !== "multi" && (
+            <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Your Address (Player 1)
-                  </label>
-                  <input
-                    type="text"
-                    value={player1Address}
-                    onChange={(e) => setPlayer1Address(e.target.value.trim())}
-                    placeholder="G..."
-                    className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium text-gray-700"
-                  />
-                  <p className="text-xs font-semibold text-gray-600 mt-1">
-                    Pre-filled from your connected wallet. If you change it, you
-                    must be able to sign as that address.
+                  <p className="text-sm font-bold text-yellow-900">
+                    ⚡ Quickstart (Dev)
+                  </p>
+                  <p className="text-xs font-semibold text-yellow-800">
+                    Creates and signs for both dev wallets in one click. Works
+                    only in the Games Library.
                   </p>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Your Points
-                  </label>
-                  <input
-                    type="text"
-                    value={player1Points}
-                    onChange={(e) => setPlayer1Points(e.target.value)}
-                    placeholder="0.1"
-                    className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
-                  />
-                  <p className="text-xs font-semibold text-gray-600 mt-1">
-                    Available: {(Number(availablePoints) / 10000000).toFixed(2)}{" "}
-                    Points
-                  </p>
-                </div>
-
-                <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                  <p className="text-xs font-semibold text-blue-800">
-                    ℹ️ Player 2 will specify their own address and points when
-                    they import your auth entry. You only need to prepare and
-                    export your signature.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t-2 border-gray-100 space-y-4">
-                <p className="text-xs font-semibold text-gray-600">
-                  Session ID: {sessionId}
-                </p>
-
-                {!exportedAuthEntryXDR ? (
-                  <button
-                    onClick={handlePrepareTransaction}
-                    disabled={isBusy}
-                    className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
-                  >
-                    {loading ? "Preparing..." : "Prepare & Export Auth Entry"}
-                  </button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
-                      <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
-                        Auth Entry XDR (Player 1 Signed)
-                      </p>
-                      <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
-                        <code className="text-xs font-mono text-gray-700 break-all">
-                          {exportedAuthEntryXDR}
-                        </code>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <button
-                          onClick={copyAuthEntryToClipboard}
-                          className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                        >
-                          {authEntryCopied ? "✓ Copied!" : "📋 Copy Auth Entry"}
-                        </button>
-                        <button
-                          onClick={copyShareGameUrlWithAuthEntry}
-                          className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-                        >
-                          {shareUrlCopied ? "✓ Copied!" : "🔗 Share URL"}
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-600 text-center font-semibold">
-                      Copy the auth entry XDR or share URL with Player 2 to
-                      complete the transaction
-                    </p>
-                  </div>
-                )}
+                <button
+                  onClick={handleQuickStart}
+                  disabled={isBusy || !quickstartAvailable}
+                  className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
+                >
+                  {quickstartLoading
+                    ? "Quickstarting..."
+                    : "⚡ Quickstart Game"}
+                </button>
               </div>
             </div>
+          )}
+
+          {createMode === "create" ? (
+            gameMode === "multi" && !isHost ? (
+              <div className="p-12 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                <h3 className="text-lg font-bold text-gray-700">
+                  Waiting for Host...
+                </h3>
+                <p className="text-gray-500 text-sm mt-2">
+                  Player 1 is preparing the game. Please wait.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Your Address (Player 1)
+                    </label>
+                    <input
+                      type="text"
+                      value={player1Address}
+                      onChange={(e) => setPlayer1Address(e.target.value.trim())}
+                      placeholder="G..."
+                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium text-gray-700"
+                    />
+                    <p className="text-xs font-semibold text-gray-600 mt-1">
+                      Pre-filled from your connected wallet. If you change it,
+                      you must be able to sign as that address.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Your Points
+                    </label>
+                    <input
+                      type="text"
+                      value={player1Points}
+                      onChange={(e) => setPlayer1Points(e.target.value)}
+                      placeholder="0.1"
+                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
+                    />
+                    <p className="text-xs font-semibold text-gray-600 mt-1">
+                      Available:{" "}
+                      {(Number(availablePoints) / 10000000).toFixed(2)} Points
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                    <p className="text-xs font-semibold text-blue-800">
+                      ℹ️ Player 2 will specify their own address and points when
+                      they import your auth entry. You only need to prepare and
+                      export your signature.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t-2 border-gray-100 space-y-4">
+                  <p className="text-xs font-semibold text-gray-600">
+                    Session ID: {sessionId}
+                  </p>
+
+                  {!exportedAuthEntryXDR ? (
+                    <button
+                      onClick={handlePrepareTransaction}
+                      disabled={isBusy}
+                      className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
+                    >
+                      {loading ? "Preparing..." : "Prepare & Export Auth Entry"}
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
+                        <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
+                          Auth Entry XDR (Player 1 Signed)
+                        </p>
+                        <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
+                          <code className="text-xs font-mono text-gray-700 break-all">
+                            {exportedAuthEntryXDR}
+                          </code>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <button
+                            onClick={copyAuthEntryToClipboard}
+                            className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+                          >
+                            {authEntryCopied
+                              ? "✓ Copied!"
+                              : "📋 Copy Auth Entry"}
+                          </button>
+                          <button
+                            onClick={copyShareGameUrlWithAuthEntry}
+                            className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+                          >
+                            {shareUrlCopied ? "✓ Copied!" : "🔗 Share URL"}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 text-center font-semibold">
+                        Copy the auth entry XDR or share URL with Player 2 to
+                        complete the transaction
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
           ) : createMode === "import" ? (
             /* IMPORT MODE */
             <div className="space-y-4">
