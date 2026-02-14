@@ -12,6 +12,7 @@ This project combines the strategic card combat of **Stellar Duel** (Yu-Gi-Oh! m
 Unlike standard playing cards, every unit in Etherion is a **Spectral Champion** with distinct battle stats and abilities.
 
 ### Structure
+
 Each card contains verifiable metadata used in ZK circuits:
 
 1.  **Name & Rank**: Determines the Level (1-12) and Tributes required (Rank 5+ requires 1 Tribute).
@@ -25,6 +26,7 @@ Each card contains verifiable metadata used in ZK circuits:
 Each turn consists of three main phases:
 
 ### 1. Nexus Phase (Draw & Push-Your-Luck)
+
 The active player draws Champions from their **Ether Deck** into the **Nexus Zone** (Play Area).
 
 - **Resonance**: If the drawn Champion's Archetype (Suit) is **new** to the Nexus this turn, the draw is successful.
@@ -32,31 +34,34 @@ The active player draws Champions from their **Ether Deck** into the **Nexus Zon
 - **Dissonance (Bust)**: If the Archetype matches one already in the Nexus, the feedback loop causes a **Dissonance**. Turn ends, cards sent to Void.
 
 ### 2. Main Phase (Summoning)
+
 - **Normal Summon**: 1 per turn from Hand/Bank.
-- **Special Summon**: Via card effects (e.g., *Voidblade Apex* Synchro Summon).
+- **Special Summon**: Via card effects (e.g., _Voidblade Apex_ Synchro Summon).
 - **Activate Spells**: Use Trait Cards or "Trait Curses" (Spells/Traps) set in previous turns.
 
 ### 3. Battle Phase
+
 - **Attack**: Target enemy Champions.
 - **Damage**: Calculated as `|ATK - DEF|` or `|ATK - ATK|`.
 - **Destruction**: Lower stat loses. ZK proof confirms the winner without revealing the loser's exact stat if it remains hidden contextually (e.g. defense position flip).
 
 ## Winning Conditions
+
 1.  **Life Point Depletion**: Opponent reaches 0 LP.
 2.  **Deckout**: Opponent cannot draw.
 3.  **Exodia Protocol**: Bank 10 Unique Archetypes in one Nexus Phase.
 
 ## Archetype Overview
 
-| Suit | Archetype | Playstyle |
-| :--- | :--- | :--- |
-| **Sword** | **Valor** | Aggro, Control, Unit Theft |
-| **Anchor** | **Harbor** | Defense, Protection, Bust Prevention |
-| **Cannon** | **Fury** | Destruction, Burn Damage |
-| **Kraken** | **Abyss** | Mill, Forced Draws, Debuffs |
-| **Map** | **Pathfinder** | Recursion, Graveyard Tools |
-| **Key** | **Gatekeeper** | Access, Double Damage |
-| **Chest** | **Hoard** | Economy, LP Gain |
-| **Oracle** | **Profit** | Information, Future Sight |
-| **Mermaid** | **Siren** | Tuning, Level Modulation |
-| **Hook** | **Trapper** | Searching, Tutoring |
+| Suit        | Archetype      | Playstyle                            |
+| :---------- | :------------- | :----------------------------------- |
+| **Sword**   | **Valor**      | Aggro, Control, Unit Theft           |
+| **Anchor**  | **Harbor**     | Defense, Protection, Bust Prevention |
+| **Cannon**  | **Fury**       | Destruction, Burn Damage             |
+| **Kraken**  | **Abyss**      | Mill, Forced Draws, Debuffs          |
+| **Map**     | **Pathfinder** | Recursion, Graveyard Tools           |
+| **Key**     | **Gatekeeper** | Access, Double Damage                |
+| **Chest**   | **Hoard**      | Economy, LP Gain                     |
+| **Oracle**  | **Profit**     | Information, Future Sight            |
+| **Mermaid** | **Siren**      | Tuning, Level Modulation             |
+| **Hook**    | **Trapper**    | Searching, Tutoring                  |
