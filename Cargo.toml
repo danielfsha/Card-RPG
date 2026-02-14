@@ -7,7 +7,6 @@ members = [
   "contracts/number-guess",
   "contracts/dice-duel",
   "contracts/card-rpg",
-  "contracts/my-game",
 ]
 
 [workspace.dependencies]

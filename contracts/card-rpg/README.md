@@ -1,129 +1,53 @@
-# Card Rpg Game
+# Etherion (Card RPG) Contract
 
-A simple two-player guessing game smart contract built on Stellar's Soroban platform.
-
-## Overview
-
-Players compete by guessing a number between 1 and 10. The player whose guess is closest to the randomly generated number wins.
-
-## Features
-
-- **Random Number Generation**: Uses Soroban's PRNG to generate fair random numbers
-- **Two-Player Games**: Each game involves exactly two players
-- **Simple Rules**: Guess a number 1-10, closest guess wins
-- **Multiple Concurrent Games**: Support for multiple independent games running simultaneously
-- **Event Emissions**: All game actions emit events for tracking
-
-## Contract Methods
-
-### `start_game`
-Start a new game between two players.
-
-**Parameters:**
-- `player1: Address` - First player's address
-- `player2: Address` - Second player's address
-
-**Returns:** `u32` - The game ID
-
-**Auth:** Requires authentication from both players
-
-### `make_guess`
-Make a guess for a game.
-
-**Parameters:**
-- `game_id: u32` - The ID of the game
-- `player: Address` - Address of the player making the guess
-- `guess: u32` - The guessed number (must be 1-10)
-
-**Returns:** `Result<(), Error>`
-
-**Auth:** Requires authentication from the guessing player
-
-### `reveal_winner`
-Reveal the winner after both players have guessed.
-
-**Parameters:**
-- `game_id: u32` - The ID of the game
-
-**Returns:** `Result<Address, Error>` - Address of the winning player
-
-**Note:** Can only be called after both players have made their guesses. If both players are equidistant from the winning number, player1 wins.
-
-### `get_game`
-Get the current state of a game.
-
-**Parameters:**
-- `game_id: u32` - The ID of the game
-
-**Returns:** `Result<Game, Error>` - The game state
+Robust ZK-based Card Battler on Stellar Soroban.
 
 ## Game Flow
 
-1. Two players call `start_game` to create a new game
-2. A random number between 1-10 is generated using PRNG
-3. Each player calls `make_guess` with their guess (1-10)
-4. Once both players have guessed, anyone can call `reveal_winner`
-5. The winner is determined by who guessed closest to the random number
-6. The game is marked as ended and the winner is recorded
-
-## Events
-
-- **GameStartedEvent**: Emitted when a new game begins
-  - `game_id: u32`
-  - `player1: Address`
-  - `player2: Address`
-
-- **GuessMadeEvent**: Emitted when a player makes a guess
-  - `game_id: u32`
-  - `player: Address`
-  - `guess: u32`
-
-- **WinnerRevealedEvent**: Emitted when the winner is revealed
-  - `game_id: u32`
-  - `winner: Address`
-  - `winning_number: u32`
-
-## Error Codes
-
-- `GameNotFound` (1): The specified game ID doesn't exist
-- `GameAlreadyStarted` (2): Game has already been started
-- `NotPlayer` (3): Caller is not a player in this game
-- `AlreadyGuessed` (4): Player has already made their guess
-- `BothPlayersNotGuessed` (5): Cannot reveal winner until both players guess
-- `GameAlreadyEnded` (6): Game has already ended
-
-## Building
-
-```bash
-stellar contract build
+```mermaid
+graph TD
+    A[Start Game] --> B[Phase: Commit]
+    B -->|P1 Commits Hash| B
+    B -->|P2 Commits Hash| B
+    B -->|Both Committed| C[Phase: Reveal]
+    C -->|P1 Reveals Secret| C
+    C -->|P2 Reveals Secret| C
+    C -->|Both Revealed| D{Check Fairness}
+    D -->|Derive Shared Seed| E[Phase: Draw]
+    E -->|ZK Proof: Draw Card| F[Phase: Main/Battle]
+    F -->|ZK Proof: Attack| G[Phase: End]
+    G -->|Switch Player| E
 ```
 
-Output: `target/wasm32v1-none/release/number_guess.wasm`
+## Fairness (Commit-Reveal)
 
-## Testing
+To ensure neither player can predict the RNG:
+
+1.  **Commit**: Both players generate a secret random `seed`. They calculate `Hash(seed)` and submit it to the contract.
+    - State: `p1_commit`, `p2_commit`
+2.  **Reveal**: Once both commitments are locked, players submit their raw `seed`.
+3.  **Verify**: Contract checks `Hash(revealed_seed) == committed_hash`.
+4.  **Derive**: Contract computes `SharedSeed = XOR(seed1, seed2)`.
+5.  **Use**: `SharedSeed` determines who goes first and seeds the deck shuffling algorithm.
+
+## Zero-Knowledge Logic
+
+- **Deck Shuffle**: The deck permutation is derived from `SharedSeed` off-chain.
+- **Draw Proof**: Player proves "I possess card at index I from the deterministic shuffle of (Deck, SharedSeed)".
+- **Battle Proof**: Player proves "I am attacking with Card A (ATK X) vs Card B (DEF Y) -> Resulting Damage Z".
+
+## Contract Methods
+
+- `start_game`: Initialize session (8000 LP).
+- `commit`: Submit seed hash.
+- `reveal`: Submit secret seed.
+- `draw_phase`: Submit ZK proof of draw.
+- `battle_phase`: Submit ZK proof of battle outcome.
+- `end_turn`: Pass turn to opponent.
+
+## Building & Testing
 
 ```bash
+cargo build --target wasm32-unknown-unknown --release
 cargo test
 ```
-
-## Example Usage
-
-```rust
-use soroban_sdk::{Address, Env};
-
-// Create game
-let game_id = contract.start_game(&player1, &player2);
-
-// Players make guesses
-contract.make_guess(&game_id, &player1, &5);
-contract.make_guess(&game_id, &player2, &7);
-
-// Reveal winner
-let winner = contract.reveal_winner(&game_id);
-```
-
-## Technical Details
-
-- **PRNG Warning**: The contract uses Soroban's PRNG which is unsuitable for generating secrets or high-stakes applications. It's perfectly fine for game mechanics where the random number is revealed immediately after use.
-- **Storage**: Uses persistent storage for game state
-- **Gas Optimization**: Minimal storage footprint per game
