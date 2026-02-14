@@ -1,0 +1,82 @@
+---
+title: Card Database
+description: The complete roster of Spectral Champions and their ZK definitions.
+---
+
+# Etherion Card Database
+
+The **Etherion** protocol utilizes a standardized card anatomy to ensure compatibility with Zero-Knowledge circuits. Each card is an instance of a **Spectral Champion** or **Artifact**.
+
+## Card Anatomy
+
+Every card in the deck requires the following attributes to be verifiable:
+
+| Attribute     | Bit Range | Description                                      |
+| :------------ | :-------- | :----------------------------------------------- |
+| **ID**        | 0-7       | Unique identifier (0-255)                        |
+| **Suit/Arch** | 8-11      | The Archetype (e.g., Valor/Sword, Harbor/Anchor) |
+| **Rank**      | 12-15     | Level or Rank (1-12)                             |
+| **ATK**       | 16-27     | Attack Points (0-4095)                           |
+| **DEF**       | 28-39     | Defense Points (0-4095)                          |
+| **Type**      | 40-43     | Monster Type (Dragon, Warrior, Machine...)       |
+| **Attribute** | 44-47     | Elemental Attribute (LIGHT, DARK, FIRE...)       |
+
+---
+
+## ⚔️ Valor Archetype (Sword Suit)
+
+_Field Control & Theft_
+
+| Rank  | Name                | Stats   | Type/Attr           | Effect                                                                                                         |
+| :---- | :------------------ | :------ | :------------------ | :------------------------------------------------------------------------------------------------------------- |
+| **1** | **Blade Wisp**      | 100/100 | Spellcaster / LIGHT | **Quick Effect**: Target 1 opponent's Champion; take control until End Phase (Req: No Swords controlled).      |
+| **2** | **Edge Sentinel**   | 200/200 | Warrior / LIGHT     | **Trigger**: On Summon, take control of 1 non-Sword Champion until End Phase.                                  |
+| **3** | **Valor Blade**     | 300/300 | Warrior / FIRE      | **Quick-Play**: Draw to Nexus -> Take control of 1 Champion you do not own. Immune to opponent's Sword traits. |
+| **4** | **Drakesworn Edge** | 400/400 | Dragon / FIRE       | **Summon**: Steal 1 Champion and equip it (This card gains that ATK).                                          |
+| **5** | **Kael's Reaver**   | 500/500 | Dragon / FIRE       | **Ritual**: Tribute 1. Steal 2 Champions. Destroys any card that battles it.                                   |
+| **6** | **Voidblade Apex**  | 600/600 | Dragon / DARK       | **Synchro**: Steal ALL opponent Champions of Suits you do not possess. Unaffected by activated effects.        |
+
+---
+
+## ⚓ Harbor Archetype (Anchor Suit)
+
+_Defense & Anti-Bust_
+
+| Rank  | Name                  | Stats   | Type/Attr           | Effect                                                                              |
+| :---- | :-------------------- | :------ | :------------------ | :---------------------------------------------------------------------------------- |
+| **1** | **Chain Link**        | 100/200 | Rock / EARTH        | **Continuous**: Your next Nexus draw cannot bust. Gains 200 DEF per Anchor.         |
+| **2** | **Harbor Guard**      | 200/300 | Aqua / WATER        | **Trigger**: Shields next 2 Nexus draws. Quick: Switch to DEF position.             |
+| **3** | **Safe Berth**        | 300/400 | Rock / EARTH        | **Field**: Summon 1 extra Anchor/turn. Anchors are immune to Cannon (Destruction).  |
+| **4** | **Ironclad Mooring**  | 400/500 | Sea Serpent / WATER | **Trigger**: Halve battle damage. Once per turn: Lock 1 enemy (Skips Battle Phase). |
+| **5** | **Eternal Anchorage** | 500/600 | Rock / EARTH        | **Fusion**: Opponent cannot attack this turn. Gains 200 DEF per Special Summon.     |
+| **6** | **Nexus Bulwark**     | 600/700 | Sea Serpent / WATER | **Xyz**: Detach 1: Field immune to Busts/Draw effects for 1 turn. Battle immune.    |
+
+---
+
+## 💣 Fury Archetype (Cannon Suit)
+
+_Destruction & Direct Damage_
+
+| Rank  | Name                  | Stats   | Type/Attr      | Effect                                                                        |
+| :---- | :-------------------- | :------ | :------------- | :---------------------------------------------------------------------------- |
+| **1** | **Spark Shot**        | 100/100 | Machine / FIRE | **Trigger**: On Draw, discard opponent's lowest ATK Champion.                 |
+| **2** | **Boom Barrage**      | 200/200 | Machine / FIRE | **Cost**: Discard 1 of your Champions -> Inflict 200 Direct Damage.           |
+| **3** | **Fury Volley**       | 300/300 | Pyro / FIRE    | **Chainable**: Discard 1 opponent Champion, then target 1 other to destroy.   |
+| **4** | **Bombard Edge**      | 400/400 | Machine / FIRE | **Trigger**: Discard 2 opponent Champions. If successful, inflict 400 damage. |
+| **5** | **Siege Blaster**     | 500/500 | Fiend / DARK   | **Ignition**: Destroy ALL opponent Champions with <500 ATK.                   |
+| **6** | **Apocalypse Cannon** | 600/600 | Machine / FIRE | **Link-1**: Discard opponent's entire field. Inflict 600 damage per card.     |
+
+---
+
+## 🦑 Abyss Archetype (Kraken Suit)
+
+_Forced Draw & Deckout_
+
+| Rank  | Name                 | Stats   | Type/Attr           | Effect                                                                           |
+| :---- | :------------------- | :------ | :------------------ | :------------------------------------------------------------------------------- |
+| **1** | **Tentacle Grasp**   | 100/300 | Aqua / WATER        | **Trigger**: Opponent draws 1 extra card to Nexus (Force Bust risk).             |
+| **2** | **Ink Cloud**        | 200/400 | Sea Serpent / DARK  | **Trigger**: Opponent draws 2. Their next battle ATK is halved.                  |
+| **3** | **Abyss Pull**       | 300/500 | Sea Serpent / WATER | **Trigger**: Opponent draws 3. If they bust, steal 1 card from their Gy to Hand. |
+| **4** | **Leviathan Lash**   | 400/600 | Sea Serpent / DARK  | **Conditional**: Opponent draws 4 (+2 if they control a Mermaid).                |
+| **5** | **Void Maw**         | 500/700 | Fiend / DARK        | **Loop**: Opponent must draw until they Bust or hit 5 cards.                     |
+| **6** | **Kraken Leviathan** | 600/800 | Sea Serpent / WATER | **Synchro**: Opponent draws 6. You bank 2 valid cards from their Nexus.          |
