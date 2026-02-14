@@ -33,16 +33,16 @@ template DrawCard(nLevels) {
     }
 
     // 2. Extract Suit from Card Value
-    // Assuming Suit is in bits 4-7 (0-indexed)
-    component cardBits = Num2Bits(16); // 16-bit card value
+    // Card Anatomy: ID(0-7), Suit(8-11), Rank(12-15), ATK(16-27), DEF(28-39), Type(40-43), Attr(44-47)
+    component cardBits = Num2Bits(64); // Safe upper bound for card anatomy
     cardBits.in <== cardValue;
 
-    // Convert suit bits to value
+    // Convert suit bits to value (Bits 8-11)
     component suitBits = Bits2Num(4);
-    suitBits.in[0] <== cardBits.out[4];
-    suitBits.in[1] <== cardBits.out[5];
-    suitBits.in[2] <== cardBits.out[6];
-    suitBits.in[3] <== cardBits.out[7];
+    suitBits.in[0] <== cardBits.out[8];
+    suitBits.in[1] <== cardBits.out[9];
+    suitBits.in[2] <== cardBits.out[10];
+    suitBits.in[3] <== cardBits.out[11];
     
     signal suit <== suitBits.out;
 
