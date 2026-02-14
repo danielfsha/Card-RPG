@@ -1,0 +1,78 @@
+---
+title: Game Rules
+description: Understanding the mechanics of the Yu-Gi-Oh! x Dead Man's Draw hybrid.
+---
+
+# Game Rules
+
+This project combines the strategic card combat of **Yu-Gi-Oh!** with the push-your-luck mechanics of **Dead Man's Draw**, all powered by Zero-Knowledge proofs for trustless play.
+
+## Core Objective
+
+Reduce your opponent's Life Points (LP) to 0. Players achieve this by summoning monsters, activating traits, and managing the risk of "busting" during their Draw Phase.
+
+## Deck Construction
+
+- **Deck Size**: 40-60 cards.
+- **Card Types**: Monsters only (Traits serve as logic).
+- **Suits**: 10 distinct Suits (based on Dead Man's Draw types, mapped to Yu-Gi-Oh archetypes).
+- **Commitment**: The entire deck is committed as a Merkle Tree at the start of the game. Order cannot be changed.
+
+## Turn Structure
+
+Each turn consists of three main phases:
+
+### 1. Draw Phase (Push-Your-Luck)
+
+The active player draws cards from their deck one by one into the **Play Area**.
+
+- **Success**: If the drawn card's suit has **not** appeared in the Play Area this turn, the draw is successful.
+- **Bank**: The player can choose to "Stop" at any time, moving all cards from the Play Area to their **Hand** or **Field** (depending on Summoning rules).
+- **Bust**: If a drawn card matches a suit already in the Play Area, the player **Busts**. The turn ends immediately, and all drawn cards are discarded to the Graveyard.
+
+### 2. Main Phase (Summoning)
+
+If the player successfully banked their cards, they can perform actions:
+
+- **Normal Summon**: Summon 1 monster from hand (or Play Area bank). Level 5+ requires Tributes.
+- **Special Summon**: Activate Traits (e.g., Mermaid) to swarm the field.
+- **Activate Effects**: Use card traits (e.g., Cannon destroys a card).
+
+### 3. Battle Phase
+
+- Attack opponent's monsters or directly if they have none.
+- **Damage Calculation**: Standard ATK vs DEF or ATK vs ATK.
+- **Atomic Resolution**: ZK proofs verify the math without revealing the exact stats of hidden cards until the battle resolves.
+
+## Special Mechanics
+
+### The "Bust" Factor in ZK
+
+In a traditional physical game, a bust is visible. In this ZK version:
+
+- The player generates a proof that they _drew_ a card.
+- The proof output includes a flag `isBust`.
+- If `isBust` is true, the smart contract enforces the turn end penalty.
+- The specific card causing the bust stays hidden unless strategic rules require revelation, but typically only the _fact_ of the bust is proven.
+
+### Traits (Suit Abilities)
+
+Based on Dead Man's Draw suits, adapted:
+| DMD Suit | Effect | YGO Adaptation |
+| :--- | :--- | :--- |
+| **Cannon** | Destroy 1 card | Destruction Effect (field target) |
+| **Sword** | Steal a card | Change of Heart / Snatch Steal |
+| **Map** | Draw from discard | Monster Reborn (Graveyard recure) |
+| **Oracle** | See next card | Topdeck manipulation / Peeking |
+| **Key** | Double rewards | Double Damage / Battle Damage x2 |
+| **Chest** | Points multiplier | LP Gain / Banking mechanic |
+| **Kraken** | Forced draw | Forced "Push Your Luck" (must draw 2 more) |
+| **Mermaid** | Score modifiers | Level manipulation / Tuning |
+| **Hook** | Retrieve card | Search deck / Add to hand |
+| **Anchor** | Save cards | Protection from Destruction |
+
+## Winning
+
+- **Deplete LP**: Reduce opponent to 0 LP.
+- **Deck Out**: Opponent cannot draw.
+- **Exodia Condition**: Bank all 10 unique suits in a single turn (Instant Win).

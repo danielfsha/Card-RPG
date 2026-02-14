@@ -1,0 +1,69 @@
+---
+title: Introduction
+description: Welcome to the Stellar Game Studio ZK Edition
+---
+
+# Stellar Game Studio ZK
+
+Welcome to the documentation for the **Zero-Knowledge adaptation** of our game platform. This project explores the intersection of high-stakes card gaming and cryptographic privacy.
+
+## Project Overview
+
+We are building a **Yu-Gi-Oh! inspired** battle card game that integrates the risk-management mechanics of **Dead Man's Draw**.
+
+### Why Zero-Knowledge?
+
+In traditional digital card games (like Hearthstone or Master Duel), the game server knows your entire deck and hand. It is a trusted third party.
+
+In a decentralized environment, we have two bad options:
+
+1.  **Commit-Reveal**: Hash your move. Reveal it later. (Slow, bad UX for "Push Your Luck").
+2.  **Trusted Server**: Defeats the point of decentralization.
+
+**ZK Proofs** allow us to have the best of both worlds:
+
+- **Instant Verification**: Prove a move is valid immediately.
+- **Total Privacy**: The opponent (and the blockchain) verify the _validity_ of the move without seeing the _data_ (the cards).
+
+## Quick Links
+
+<Cards>
+  <Card
+    title="Game Rules"
+    href="/docs/game-rules"
+    description="Learn how to play the hybrid DMD x YGO format."
+  />
+  <Card
+    title="ZK Architecture"
+    href="/docs/zk-architecture"
+    description="Understanding the circuits and cryptographic proofs."
+  />
+  <Card
+    title="GitHub Repo"
+    href="https://github.com/stellar/stellar-game-studio"
+    description="View the source code."
+  />
+</Cards>
+
+## Technical Stack
+
+- **Frontend**: React, Vite, TailwindCSS
+- **ZK Circuits**: Circom, SnarkJS
+- **Blockchain**: Stellar / Soroban (Contracts), Stylus (Potential)
+- **Documentation**: Fumadocs
+
+## Getting Started
+
+To run the game locally:
+
+```bash
+# Install dependencies
+bun install
+
+# Run the frontend
+bun run dev
+
+# Compile Circuits
+cd circuits
+npm run build
+```
