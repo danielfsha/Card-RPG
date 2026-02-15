@@ -1,30 +1,34 @@
 pragma circom 2.0.0;
 
-include "../../node_modules/circomlib/circuits/pedersen.circom";
-include "../../node_modules/circomlib/circuits/bitify.circom";
+include "../../node_modules/circomlib/circuits/poseidon.circom";
 
-// Commitment: Hash(card_value + blinding_factor)
-// We typically use Pedersen for high efficiency in constraints if interacting with Ethereum, 
-// or Poseidon if standardizing on ZK-friendly hash. 
-// Detailed prompt asks for Pedersen.
+// Card Commitment using Poseidon hash (ZK-friendly, efficient)
+// Commitment = Poseidon(cardValue, blindingFactor)
+// This is compatible with Stellar's Protocol 25 Poseidon support
 
 template CardCommitment() {
     signal input cardValue; // Card ID/Value
-    signal input blindingFactor;
+    signal input blindingFactor; // Random nonce for hiding
     
     signal output commitment;
 
-    component pedersen = Pedersen(256); // 256 bits of input
-    component cardBits = Num2Bits(128);
-    component blindBits = Num2Bits(128);
+    component hasher = Poseidon(2);
+    hasher.inputs[0] <== cardValue;
+    hasher.inputs[1] <== blindingFactor;
 
-    cardBits.in <== cardValue;
-    blindBits.in <== blindingFactor;
+    commitment <== hasher.out;
+}
 
-    for (var i = 0; i < 128; i++) {
-        pedersen.in[i] <== cardBits.out[i];
-        pedersen.in[i + 128] <== blindBits.out[i];
-    }
+// Verify a card commitment matches the revealed values
+template VerifyCommitment() {
+    signal input cardValue;
+    signal input blindingFactor;
+    signal input commitment;
 
-    commitment <== pedersen.out[0];
+    component hasher = Poseidon(2);
+    hasher.inputs[0] <== cardValue;
+    hasher.inputs[1] <== blindingFactor;
+
+    // Constrain that computed hash equals provided commitment
+    commitment === hasher.out;
 }

@@ -6,13 +6,14 @@ include "../../node_modules/circomlib/circuits/bitify.circom";
 
 // Draw Card Circuit
 // Proves that a card was drawn from the committed deck and does not cause a bust.
-// Card Value Format: Lower 4 bits = Rank, Next 4 bits = Suit.
-// Max Suits = 10 (as per DM Draw), so 4 bits is enough (0-15).
+// Card Value Format: ID(0-7), Suit(8-11), Rank(12-15), ATK(16-27), DEF(28-39), Type(40-43), Attr(44-47)
+// Max Suits = 16 (4 bits)
 
 template DrawCard(nLevels) {
     // Public Inputs
     signal input deckRoot;
     signal input currentSuitsMask; // Bitmask of currently active suits in Play Area
+    signal input cardIndex; // Index of card in deck (for Merkle proof)
 
     // Private Inputs
     signal input cardValue;
@@ -21,9 +22,10 @@ template DrawCard(nLevels) {
     
     // Outputs
     signal output newSuitsMask;
-    signal output isBust; // 1 if bust, 0 if valid (Technically usually we just fail proof if bust, but explicit output allows logic handling)
+    signal output isBust; // 1 if bust, 0 if valid
+    signal output drawnSuit; // The suit that was drawn
 
-    // 1. Verify Card is in Deck
+    // 1. Verify Card is in Deck using Merkle proof
     component merkle = MerkleProof(nLevels);
     merkle.leaf <== cardValue;
     merkle.root <== deckRoot;
@@ -32,12 +34,10 @@ template DrawCard(nLevels) {
         merkle.pathIndices[i] <== pathIndices[i];
     }
 
-    // 2. Extract Suit from Card Value
-    // Card Anatomy: ID(0-7), Suit(8-11), Rank(12-15), ATK(16-27), DEF(28-39), Type(40-43), Attr(44-47)
-    component cardBits = Num2Bits(64); // Safe upper bound for card anatomy
+    // 2. Extract Suit from Card Value (bits 8-11)
+    component cardBits = Num2Bits(64);
     cardBits.in <== cardValue;
 
-    // Convert suit bits to value (Bits 8-11)
     component suitBits = Bits2Num(4);
     suitBits.in[0] <== cardBits.out[8];
     suitBits.in[1] <== cardBits.out[9];
@@ -45,20 +45,16 @@ template DrawCard(nLevels) {
     suitBits.in[3] <== cardBits.out[11];
     
     signal suit <== suitBits.out;
+    drawnSuit <== suit;
 
     // 3. Check for Bust (is Suit already in currentSuitsMask?)
-    // currentSuitsMask is a bitmask. valid if (currentSuitsMask >> suit) & 1 == 0
-    // We can use a shifter or just check bit constraints if max suits is small.
-    // Since suits < 16, we can decompose the mask.
-    
     component maskBits = Num2Bits(16);
     maskBits.in <== currentSuitsMask;
     
-    // The bit corresponding to 'suit' must be 0 for NO bust.
-    // Since 'suit' is a signal, we need a dynamic access or equal check for each bit.
-    
+    // Check if the suit bit is already set
     signal bustCheck[16];
-    var bustSum = 0;
+    signal bustSum[17];
+    bustSum[0] <== 0;
     
     component equals[16];
 
@@ -69,30 +65,19 @@ template DrawCard(nLevels) {
         
         // If (i == suit) AND (maskBits.out[i] == 1) -> Bust
         bustCheck[i] <== equals[i].out * maskBits.out[i];
-        bustSum += bustCheck[i]; 
+        bustSum[i+1] <== bustSum[i] + bustCheck[i];
     }
 
-    // bustSum will be 1 if bust, 0 if not.
-    // We enforce no bust for a valid "successful draw" proof? 
-    // The prompt says "Busts self-enforce: invalid proof loses turn".
-    // This implies we might want to prove we DID bust to end turn safely? 
-    // Or prove valid draw to continue. Let's output isBust.
-    
-    isBust <== bustSum;
+    isBust <== bustSum[16];
 
-    // 4. Calculate New Mask
-    // newMask = currentMask | (1 << suit)
-    // If not bust, we add the bit. If bust, we output currentMask (or reset? let's just output updated mask if valid)
-    
+    // 4. Calculate New Mask (set the suit bit)
     component newMaskCalc = Bits2Num(16);
+    signal newBits[16];
+    
     for (var i = 0; i < 16; i++) {
-        // bit i is 1 if (old bit is 1) OR (i == suit)
-        // logic: out = old[i] + (i==suit) - old[i]*(i==suit) ?? 
-        // simpler: out = old[i] + equal[i] - old[i]*equal[i] (OR gate)
-        // But if bust, equal[i] and old[i] are both 1, so 1+1-1=1. Correct.
-        
-        var bit_or = maskBits.out[i] + equals[i].out - (maskBits.out[i] * equals[i].out);
-        newMaskCalc.in[i] <== bit_or;
+        // OR operation: newBit = oldBit + (i==suit) - oldBit*(i==suit)
+        newBits[i] <== maskBits.out[i] + equals[i].out - (maskBits.out[i] * equals[i].out);
+        newMaskCalc.in[i] <== newBits[i];
     }
     
     newSuitsMask <== newMaskCalc.out;

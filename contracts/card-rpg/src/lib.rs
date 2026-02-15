@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec, Bytes
+    contract, contractimpl, contracttype, contracterror, symbol_short, Address, Env, Bytes, Vec, panic_with_error
 };
 
 // ---------------------------------------------------------------------------
@@ -23,108 +23,195 @@ pub trait GameHub {
 }
 
 // ---------------------------------------------------------------------------
+// Error Codes
+// ---------------------------------------------------------------------------
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    NotInitialized = 1,
+    AlreadyInitialized = 2,
+    NotInPhase = 3,
+    NotPlayer = 4,
+    InvalidProof = 5,
+    InvalidCommitment = 6,
+    GameNotFound = 7,
+    NotYourTurn = 8,
+    InvalidMove = 9,
+    InvalidCard = 10,
+}
+
+// ---------------------------------------------------------------------------
 // Data & Types
 // ---------------------------------------------------------------------------
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Phase {
-    Standby,
+    Created,
     Commit,
     Reveal,
-    Draw,
-    Main,
-    Battle,
-    End,
+    Playing,
+    Finished,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Card {
+    pub suit: u32,   // 0-3: Swords, Coins, Cups, Wands
+    pub rank: u32,   // 1-10
 }
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GameState {
+    pub session_id: u32,
     pub player1: Address,
     pub player2: Address,
+    pub p1_deck_root: Bytes,
+    pub p2_deck_root: Bytes,
     pub p1_commit: Option<Bytes>,
     pub p2_commit: Option<Bytes>,
     pub p1_revealed: bool,
     pub p2_revealed: bool,
     pub shared_seed: Bytes,
-    pub current_turn: u32,
-    pub p1_lp: u32,
-    pub p2_lp: u32,
+    pub p1_score: u32,
+    pub p2_score: u32,
+    pub p1_busts: u32,
+    pub p2_busts: u32,
+    pub p1_cards_drawn: u32,  // Cards drawn from deck
+    pub p2_cards_drawn: u32,
     pub active_player: Address,
+    pub turn_cards: Vec<u32>,      // Card IDs drawn this turn
+    pub turn_suits_mask: u32,      // 4-bit mask of suits this turn
+    pub turn_score: u32,          // Points accumulated this turn
     pub phase: Phase,
-    pub last_move_proof: Option<Bytes>,
+    pub turn_number: u32,
 }
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    GameState,
+    GameState(u32),
     GameHub,
     Admin,
+    Initialized,
 }
 
 const GAME_TTL_LEDGERS: u32 = 518_400; // ~30 days
+const WIN_SCORE: u32 = 60;
+const MAX_BUSTS: u32 = 3;
+const DECK_SIZE: u32 = 40;
+
+// ---------------------------------------------------------------------------
+// Helper Functions
+// ---------------------------------------------------------------------------
+
+impl Card {
+    pub fn from_id(card_id: u32) -> Result<Self, Error> {
+        if card_id >= DECK_SIZE {
+            return Err(Error::InvalidCard);
+        }
+        
+        let suit = card_id / 10;
+        let rank = (card_id % 10) + 1;
+        
+        Ok(Card { suit, rank })
+    }
+    
+    pub fn to_id(&self) -> u32 {
+        self.suit * 10 + (self.rank - 1)
+    }
+    
+    pub fn value(&self) -> u32 {
+        self.rank
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
 
 #[contract]
-pub struct CardAppContract;
+pub struct DeadMansDrawContract;
 
 #[contractimpl]
-impl CardAppContract {
-    /// Initialize the contract with GameHub.
-    pub fn init(env: Env, admin: Address, game_hub: Address) {
+impl DeadMansDrawContract {
+    /// Initialize the contract with GameHub (constructor pattern).
+    pub fn __constructor(env: Env, admin: Address, game_hub: Address) {
+        if env.storage().instance().has(&DataKey::Initialized) {
+            panic_with_error!(&env, Error::AlreadyInitialized);
+        }
+        
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::GameHub, &game_hub);
+        env.storage().instance().set(&DataKey::Initialized, &true);
+        env.storage().instance().extend_ttl(GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
     }
 
-    /// Start a new game session.
-    /// Called by the Game Hub or via a proxy that mandates Game Hub interaction.
+    /// Start a new game session with deck commitments.
     pub fn start_game(
         env: Env,
         session_id: u32,
         player1: Address,
         player2: Address,
-        item_id_limit: u32, // Not used but part of some interfaces
+        p1_deck_root: Bytes,
+        p2_deck_root: Bytes,
     ) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic_with_error!(&env, Error::NotInitialized);
+        }
+
+        if player1 == player2 {
+            panic_with_error!(&env, Error::InvalidMove);
+        }
+
         player1.require_auth();
         player2.require_auth();
 
-        // Emit Event
+        let game_key = DataKey::GameState(session_id);
+        if env.storage().temporary().has(&game_key) {
+            panic_with_error!(&env, Error::InvalidMove);
+        }
+
         env.events().publish(
             (symbol_short!("NEW_GAME"), session_id), 
             (player1.clone(), player2.clone())
         );
 
         let state = GameState {
+            session_id,
             player1: player1.clone(),
             player2: player2.clone(),
+            p1_deck_root,
+            p2_deck_root,
             p1_commit: None,
             p2_commit: None,
             p1_revealed: false,
             p2_revealed: false,
             shared_seed: Bytes::new(&env),
-            current_turn: 1,
-            p1_lp: 8000,
-            p2_lp: 8000,
+            p1_score: 0,
+            p2_score: 0,
+            p1_busts: 0,
+            p2_busts: 0,
+            p1_cards_drawn: 0,
+            p2_cards_drawn: 0,
             active_player: player1.clone(),
-            phase: Phase::Commit, // Start at Commit Phase
-            last_move_proof: None,
+            turn_cards: Vec::new(&env),
+            turn_suits_mask: 0,
+            turn_score: 0,
+            phase: Phase::Commit,
+            turn_number: 1,
         };
 
-        env.storage().instance().set(&DataKey::GameState, &state);
-        // Extend TTL
-        env.storage().instance().extend_ttl(GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
 
-        // Notify Game Hub
-        let game_hub_addr: Address = env.storage().instance().get(&DataKey::GameHub).unwrap();
+        let game_hub_addr: Address = env.storage().instance()
+            .get(&DataKey::GameHub)
+            .unwrap();
         let client = GameHubClient::new(&env, &game_hub_addr);
         
-        // Note: In a real flow, points would be handled here. 
-        // We pass 0 points for this basic implementation.
         client.start_game(
             &env.current_contract_address(),
             &session_id,
@@ -135,19 +222,17 @@ impl CardAppContract {
         );
     }
 
-    /// Phase 1: Players commit their secret seed hashes.
-    pub fn commit(env: Env, player: Address, hash: Bytes) {
+    /// Phase 1: Commit seed hash
+    pub fn commit(env: Env, session_id: u32, player: Address, hash: Bytes) {
         player.require_auth();
-        let mut state: GameState = env.storage().instance().get(&DataKey::GameState).unwrap();
         
-        // Retrieve Session ID for events - assuming we store it or can infer it. 
-        // For now, using a DataKey for SessionID would be better, but we'll emit generic.
-        // Or assume 0 for single instance if deployed per game, or argument.
-        // Optimization: Pass session_id in calls or store in state.
-        // Let's add session_id to GameState for Events.
+        let game_key = DataKey::GameState(session_id);
+        let mut state: GameState = env.storage().temporary()
+            .get(&game_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GameNotFound));
         
         if state.phase != Phase::Commit {
-            panic!("Not in Commit Phase");
+            panic_with_error!(&env, Error::NotInPhase);
         }
 
         if player == state.player1 {
@@ -155,157 +240,262 @@ impl CardAppContract {
         } else if player == state.player2 {
             state.p2_commit = Some(hash);
         } else {
-            panic!("Not a player");
+            panic_with_error!(&env, Error::NotPlayer);
         }
 
-        // Check if both committed
         if state.p1_commit.is_some() && state.p2_commit.is_some() {
             state.phase = Phase::Reveal;
-            env.events().publish((symbol_short!("PHASE"), 0u32), Phase::Reveal);
+            env.events().publish((symbol_short!("PHASE"), session_id), Phase::Reveal);
         }
 
-        env.storage().instance().set(&DataKey::GameState, &state);
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
     }
 
-    /// Phase 2: Players reveal their seeds.
-    /// Uses Commit-Reveal scheme to ensure fairness without an external oracle.
-    pub fn reveal(env: Env, player: Address, seed: Bytes) {
+    /// Phase 2: Reveal seed
+    pub fn reveal(env: Env, session_id: u32, player: Address, seed: Bytes) {
         player.require_auth();
-        let mut state: GameState = env.storage().instance().get(&DataKey::GameState).unwrap();
+        
+        let game_key = DataKey::GameState(session_id);
+        let mut state: GameState = env.storage().temporary()
+            .get(&game_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GameNotFound));
         
         if state.phase != Phase::Reveal {
-            panic!("Not in Reveal Phase");
+            panic_with_error!(&env, Error::NotInPhase);
         }
 
-        // Verify Hash: SHA256(seed) == stored_hash
-        // Convert Hash<32> to Bytes for comparison
         let seed_hash: Bytes = env.crypto().sha256(&seed).into();
         
         if player == state.player1 {
-            assert!(state.p1_commit.is_some(), "P1 No commit found");
-            assert!(seed_hash == state.p1_commit.clone().unwrap(), "P1 Invalid Seed");
+            if state.p1_commit.is_none() {
+                panic_with_error!(&env, Error::InvalidCommitment);
+            }
+            if seed_hash != state.p1_commit.clone().unwrap() {
+                panic_with_error!(&env, Error::InvalidCommitment);
+            }
             state.p1_revealed = true;
         } else if player == state.player2 {
-            assert!(state.p2_commit.is_some(), "P2 No commit found");
-            assert!(seed_hash == state.p2_commit.clone().unwrap(), "P2 Invalid Seed");
+            if state.p2_commit.is_none() {
+                panic_with_error!(&env, Error::InvalidCommitment);
+            }
+            if seed_hash != state.p2_commit.clone().unwrap() {
+                panic_with_error!(&env, Error::InvalidCommitment);
+            }
             state.p2_revealed = true;
         } else {
-            panic!("Not a player");
+            panic_with_error!(&env, Error::NotPlayer);
         }
 
-        // Update shared seed by appending bytes
         let mut current_seed = state.shared_seed;
         current_seed.append(&seed);
         state.shared_seed = current_seed;
 
-        // If this is the second reveal (both revealed), move to Draw
         if state.p1_revealed && state.p2_revealed {
-            // Determine Start Player using the combined entropy
-            let final_hash = env.crypto().sha256(&state.shared_seed).to_bytes();
-            let last_byte = final_hash.get(31).unwrap_or(0); // Bytes get returns Option<u8> (or u8?) Check SDK. Default to get returns u8 in Bytes?
-            // Actually Bytes::get returns Option<u8> in recent SDK? Or directly u8 if index is u32
-            // Let's assume standard Soroban SDK Bytes::get(i) -> u8.
+            // Determine starting player deterministically
+            let final_hash = env.crypto().sha256(&state.shared_seed);
+            let hash_bytes = final_hash.to_bytes();
+            let last_byte = hash_bytes.get(31).unwrap_or(0);
             
             if last_byte % 2 == 0 {
                 state.active_player = state.player1.clone();
             } else {
                 state.active_player = state.player2.clone();
             }
-            state.phase = Phase::Draw; 
-            env.events().publish((symbol_short!("PHASE"), 0u32), Phase::Draw);
+            state.phase = Phase::Playing; 
+            env.events().publish((symbol_short!("PHASE"), session_id), Phase::Playing);
         }
         
-        env.storage().instance().set(&DataKey::GameState, &state);
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
     }
 
-    /// Execute the Draw Phase.
-    /// In a ZK game, this would involve proving you drew a card from your private deck commitment.
-    pub fn draw_phase(env: Env, _proof: Bytes) {
-        let mut state: GameState = env.storage().instance().get(&DataKey::GameState).unwrap();
-        state.active_player.require_auth();
-        
-        if state.phase != Phase::Draw {
-            panic!("Not in Draw Phase");
-        }
-
-        // TODO: Verify ZK Proof (Draw Circuit)
-        // verify_draw_proof(&proof);
-
-        state.phase = Phase::Main;
-        env.storage().instance().set(&DataKey::GameState, &state);
-    }
-
-    /// Execute a Battle Move.
-    /// This uses the Battle Circuit proof which takes two cards and position, and outputs damage.
-    pub fn battle_phase(
-        env: Env, 
-        proof: Bytes, 
-        p1_dmg: u32, 
-        p2_dmg: u32,
-        _destroy_p1: bool,
-        _destroy_p2: bool
+    /// Draw a card with ZK proof
+    pub fn draw_card(
+        env: Env,
+        session_id: u32,
+        card_id: u32,
+        proof: Bytes,
+        is_bust: bool,
+        new_suits_mask: u32,
     ) {
-        let mut state: GameState = env.storage().instance().get(&DataKey::GameState).unwrap();
-        state.active_player.require_auth();
-
-        if state.phase != Phase::Main && state.phase != Phase::Battle {
-            panic!("Not in Battle Phase");
-        }
-
-        // TODO: Verify ZK Proof (Battle Circuit)
-        // Ensure the public outputs (damage, destroy flags) match the proof.
-        // verify_battle_proof(&proof, p1_dmg, p2_dmg, destroy_p1, destroy_p2);
-
-        // Apply state changes
-        if state.active_player == state.player1 {
-            state.p2_lp = state.p2_lp.saturating_sub(p2_dmg);
-            state.p1_lp = state.p1_lp.saturating_sub(p1_dmg);
-        } else {
-            state.p1_lp = state.p1_lp.saturating_sub(p2_dmg);
-            state.p2_lp = state.p2_lp.saturating_sub(p1_dmg);
-        }
-
-        state.phase = Phase::End;
-        state.last_move_proof = Some(proof);
+        let game_key = DataKey::GameState(session_id);
+        let mut state: GameState = env.storage().temporary()
+            .get(&game_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GameNotFound));
         
-        env.storage().instance().set(&DataKey::GameState, &state);
-
-        // Check Win Condition
-        if state.p1_lp == 0 || state.p2_lp == 0 {
-             Self::finalize_game(env, state);
+        state.active_player.require_auth();
+        
+        if state.phase != Phase::Playing {
+            panic_with_error!(&env, Error::NotInPhase);
         }
+
+        // Validate proof (stub - will integrate Protocol 25 verification)
+        if proof.len() == 0 {
+            panic_with_error!(&env, Error::InvalidProof);
+        }
+
+        // TODO: Verify ZK proof that:
+        // 1. Card exists in player's deck
+        // 2. Bust detection is correct
+        // 3. New suits mask is correct
+
+        let card = Card::from_id(card_id)
+            .unwrap_or_else(|_| panic_with_error!(&env, Error::InvalidCard));
+
+        // Update cards drawn counter
+        if state.active_player == state.player1 {
+            state.p1_cards_drawn += 1;
+            if state.p1_cards_drawn > DECK_SIZE {
+                panic_with_error!(&env, Error::InvalidMove);
+            }
+        } else {
+            state.p2_cards_drawn += 1;
+            if state.p2_cards_drawn > DECK_SIZE {
+                panic_with_error!(&env, Error::InvalidMove);
+            }
+        }
+
+        if is_bust {
+            // BUST! Lose all cards this turn
+            state.turn_cards = Vec::new(&env);
+            state.turn_suits_mask = 0;
+            state.turn_score = 0;
+            
+            if state.active_player == state.player1 {
+                state.p1_busts += 1;
+            } else {
+                state.p2_busts += 1;
+            }
+            
+            env.events().publish(
+                (symbol_short!("BUST"), session_id),
+                state.active_player.clone()
+            );
+            
+            // Check if player has busted too many times
+            let busts = if state.active_player == state.player1 {
+                state.p1_busts
+            } else {
+                state.p2_busts
+            };
+            
+            if busts >= MAX_BUSTS {
+                Self::finalize_game(env.clone(), state.clone());
+                return;
+            }
+            
+            // End turn automatically on bust
+            Self::switch_player(&mut state);
+        } else {
+            // Safe draw - add to turn
+            state.turn_cards.push_back(card_id);
+            state.turn_suits_mask = new_suits_mask;
+            state.turn_score += card.value();
+            
+            env.events().publish(
+                (symbol_short!("DRAW"), session_id),
+                card_id as u32
+            );
+        }
+
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
     }
 
-    pub fn end_turn(env: Env) {
-        let mut state: GameState = env.storage().instance().get(&DataKey::GameState).unwrap();
+    /// Bank cards (stop drawing and add to score)
+    pub fn bank_cards(env: Env, session_id: u32) {
+        let game_key = DataKey::GameState(session_id);
+        let mut state: GameState = env.storage().temporary()
+            .get(&game_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GameNotFound));
+        
         state.active_player.require_auth();
+        
+        if state.phase != Phase::Playing {
+            panic_with_error!(&env, Error::NotInPhase);
+        }
 
-        // Switch Active Player
+        // Add turn score to player's total
+        if state.active_player == state.player1 {
+            state.p1_score += state.turn_score;
+        } else {
+            state.p2_score += state.turn_score;
+        }
+
+        env.events().publish(
+            (symbol_short!("BANK"), session_id),
+            state.turn_score
+        );
+
+        // Clear turn state
+        state.turn_cards = Vec::new(&env);
+        state.turn_suits_mask = 0;
+        state.turn_score = 0;
+
+        // Check win condition
+        if state.p1_score >= WIN_SCORE || state.p2_score >= WIN_SCORE {
+            Self::finalize_game(env.clone(), state.clone());
+            return;
+        }
+
+        // Switch to next player
+        Self::switch_player(&mut state);
+
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+    }
+
+    /// Helper: Switch active player
+    fn switch_player(state: &mut GameState) {
         if state.active_player == state.player1 {
             state.active_player = state.player2.clone();
         } else {
             state.active_player = state.player1.clone();
         }
-        
-        state.current_turn += 1;
-        state.phase = Phase::Draw; // Next turn starts at Draw
-
-        env.storage().instance().set(&DataKey::GameState, &state);
+        state.turn_number += 1;
     }
 
-    fn finalize_game(env: Env, state: GameState) {
-        let game_hub_addr: Address = env.storage().instance().get(&DataKey::GameHub).unwrap();
+    /// Finalize game and notify Game Hub
+    fn finalize_game(env: Env, mut state: GameState) {
+        state.phase = Phase::Finished;
+        
+        let game_hub_addr: Address = env.storage().instance()
+            .get(&DataKey::GameHub)
+            .unwrap();
         let client = GameHubClient::new(&env, &game_hub_addr);
         
         // Determine winner
-        let p1_won = state.p1_lp > 0;
+        let p1_won = if state.p1_score >= WIN_SCORE {
+            true
+        } else if state.p2_score >= WIN_SCORE {
+            false
+        } else if state.p2_busts >= MAX_BUSTS {
+            true
+        } else if state.p1_busts >= MAX_BUSTS {
+            false
+        } else {
+            state.p1_score > state.p2_score
+        };
         
-        // Pass dummy session ID (should be stored in state, simplified here)
-        client.end_game(&0u32, &p1_won);
+        client.end_game(&state.session_id, &p1_won);
+        
+        env.events().publish(
+            (symbol_short!("WINNER"), state.session_id),
+            if p1_won { state.player1.clone() } else { state.player2.clone() }
+        );
+        
+        let game_key = DataKey::GameState(state.session_id);
+        env.storage().temporary().set(&game_key, &state);
+        env.storage().temporary().extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
     }
     
-    pub fn get_state(env: Env) -> GameState {
-        env.storage().instance().get(&DataKey::GameState).unwrap()
+    /// Get current game state
+    pub fn get_game(env: Env, session_id: u32) -> GameState {
+        let game_key = DataKey::GameState(session_id);
+        env.storage().temporary()
+            .get(&game_key)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::GameNotFound))
     }
 }
 

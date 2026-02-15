@@ -1,17 +1,24 @@
 {
-  "name": "circuits",
+  "name": "zk-card-rpg-circuits",
   "version": "1.0.0",
-  "description": "",
+  "description": "Zero-Knowledge circuits for Yu-Gi-Oh! style card game on Stellar",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "circom src/main.circom --r1cs --wasm --sym --output ."
+    "build": "npm run build:draw && npm run build:battle && npm run build:main",
+    "build:draw": "circom src/game/draw_only.circom --r1cs --wasm --sym --output build/draw",
+    "build:battle": "circom src/game/battle_only.circom --r1cs --wasm --sym --output build/battle",
+    "build:main": "circom src/game/zk_card_rpg.circom --r1cs --wasm --sym --output build/main",
+    "clean": "rm -rf build main_js *.r1cs *.sym",
+    "test": "echo \"Run snarkjs tests after building circuits\""
   },
-  "keywords": [],
+  "keywords": ["zk", "circom", "stellar", "card-game", "zero-knowledge"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "circomlib": "^2.0.5"
+  },
+  "devDependencies": {
+    "snarkjs": "^0.7.0"
   }
 }
