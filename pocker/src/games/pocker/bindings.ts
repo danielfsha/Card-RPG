@@ -30,12 +30,14 @@ if (typeof window !== "undefined") {
   window.Buffer = window.Buffer || Buffer;
 }
 
+
 export const networks = {
   testnet: {
     networkPassphrase: "Test SDF Network ; September 2015",
-    contractId: "CADFQXKSMYG5VR2JIXGT7WMUDDOXEUC7HXLWOHH2Z7HOVUVBZ6YA4WLS",
+    contractId: "CBVHGAN3B75DWRX5ZQ4I4EH5FOYOD745Y47OAYLVNPB2JJTMUDO7LAQ5",
   }
 } as const
+
 
 export interface Game {
   phase: Phase;
@@ -68,11 +70,13 @@ export type Phase = {tag: "Commit", values: void} | {tag: "Reveal", values: void
 
 export type DataKey = {tag: "Game", values: readonly [u32]} | {tag: "GameHubAddress", values: void} | {tag: "Admin", values: void} | {tag: "VerificationKey", values: void};
 
+
 export interface Groth16Proof {
   pi_a: Buffer;
   pi_b: Buffer;
   pi_c: Buffer;
 }
+
 
 export interface VerificationKey {
   alpha: Buffer;
@@ -91,26 +95,135 @@ export const VerificationError = {
 }
 
 export interface Client {
+  /**
+   * Construct and simulate a get_hub transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get the current GameHub contract address
+   * 
+   * # Returns
+   * * `Address` - The GameHub contract address
+   */
   get_hub: (options?: MethodOptions) => Promise<AssembledTransaction<string>>
-  set_hub: ({new_hub}: {new_hub: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
-  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
-  get_game: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
-  get_admin: (options?: MethodOptions) => Promise<AssembledTransaction<string>>
-  set_admin: ({new_admin}: {new_admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
-  start_game: ({session_id, player1, player2, player1_points, player2_points}: {session_id: u32, player1: string, player2: string, player1_points: i128, player2_points: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
-  reveal_winner: ({session_id, proof, public_signals}: {session_id: u32, proof: Groth16Proof, public_signals: Array<Buffer>}, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
-  submit_commitment: ({session_id, player, commitment}: {session_id: u32, player: string, commitment: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
-  get_verification_key: (options?: MethodOptions) => Promise<AssembledTransaction<Option<VerificationKey>>>
-  set_verification_key: ({vk}: {vk: VerificationKey}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
-}
 
+  /**
+   * Construct and simulate a set_hub transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set a new GameHub contract address
+   * 
+   * # Arguments
+   * * `new_hub` - The new GameHub contract address
+   */
+  set_hub: ({new_hub}: {new_hub: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+
+  /**
+   * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Update the contract WASM hash (upgrade contract)
+   * 
+   * # Arguments
+   * * `new_wasm_hash` - The hash of the new WASM binary
+   */
+  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+
+  /**
+   * Construct and simulate a get_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get game information.
+   * 
+   * # Arguments
+   * * `session_id` - The session ID of the game
+   * 
+   * # Returns
+   * * `Game` - The game state
+   */
+  get_game: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
+
+  /**
+   * Construct and simulate a get_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get the current admin address
+   * 
+   * # Returns
+   * * `Address` - The admin address
+   */
+  get_admin: (options?: MethodOptions) => Promise<AssembledTransaction<string>>
+
+  /**
+   * Construct and simulate a set_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set a new admin address
+   * 
+   * # Arguments
+   * * `new_admin` - The new admin address
+   */
+  set_admin: ({new_admin}: {new_admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+
+  /**
+   * Construct and simulate a start_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Start a new game between two players with points.
+   * This creates a session in the Game Hub and locks points before starting the game.
+   * 
+   * # Arguments
+   * * `session_id` - Unique session identifier (u32)
+   * * `player1` - Address of first player
+   * * `player2` - Address of second player
+   * * `player1_points` - Points amount committed by player 1
+   * * `player2_points` - Points amount committed by player 2
+   */
+  start_game: ({session_id, player1, player2, player1_points, player2_points}: {session_id: u32, player1: string, player2: string, player1_points: i128, player2_points: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a reveal_winner transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Reveal the winner using a ZK proof
+   * Verifies that revealed cards match commitments and determines winner
+   * 
+   * # Arguments
+   * * `session_id` - The session ID of the game
+   * * `proof` - Groth16 ZK proof
+   * * `public_signals` - Public signals from the proof (commitments, rankings, winner)
+   * 
+   * # Returns
+   * * `Address` - Address of the winning player
+   */
+  reveal_winner: ({session_id, proof, public_signals}: {session_id: u32, proof: Groth16Proof, public_signals: Array<Buffer>}, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
+
+  /**
+   * Construct and simulate a submit_commitment transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Submit a commitment for your hand (Poseidon hash)
+   * Players must commit before revealing
+   * 
+   * # Arguments
+   * * `session_id` - The session ID of the game
+   * * `player` - Address of the player making the commitment
+   * * `commitment` - Poseidon hash of cards + salt
+   */
+  submit_commitment: ({session_id, player, commitment}: {session_id: u32, player: string, commitment: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a get_verification_key transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get the current verification key
+   * 
+   * # Returns
+   * * `VerificationKey` - The verification key
+   */
+  get_verification_key: (options?: MethodOptions) => Promise<AssembledTransaction<Option<VerificationKey>>>
+
+  /**
+   * Construct and simulate a set_verification_key transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set the verification key for ZK proof verification
+   * 
+   * # Arguments
+   * * `vk` - The verification key from trusted setup
+   */
+  set_verification_key: ({vk}: {vk: VerificationKey}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+
+}
 export class Client extends ContractClient {
   static async deploy<T = Client>(
-    {admin, game_hub}: {admin: string, game_hub: string},
+        /** Constructor/Initialization Args for the contract's `__constructor` method */
+        {admin, game_hub}: {admin: string, game_hub: string},
+    /** Options for initializing a Client as well as for calling a method, with extras specific to deploying. */
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
+        /** The hash of the Wasm blob, which must already be installed on-chain. */
         wasmHash: Buffer | string;
+        /** Salt used to generate the contract's ID. Passed through to {@link Operation.createCustomContract}. Default: random. */
         salt?: Buffer | Uint8Array;
+        /** The format used to decode `wasmHash`, if it's provided as a string. */
         format?: "hex" | "base64";
       }
   ): Promise<AssembledTransaction<T>> {
@@ -143,15 +256,15 @@ export class Client extends ContractClient {
   }
   public readonly fromJSON = {
     get_hub: this.txFromJSON<string>,
-    set_hub: this.txFromJSON<null>,
-    upgrade: this.txFromJSON<null>,
-    get_game: this.txFromJSON<Result<Game>>,
-    get_admin: this.txFromJSON<string>,
-    set_admin: this.txFromJSON<null>,
-    start_game: this.txFromJSON<Result<void>>,
-    reveal_winner: this.txFromJSON<Result<string>>,
-    submit_commitment: this.txFromJSON<Result<void>>,
-    get_verification_key: this.txFromJSON<Option<VerificationKey>>,
-    set_verification_key: this.txFromJSON<null>
+        set_hub: this.txFromJSON<null>,
+        upgrade: this.txFromJSON<null>,
+        get_game: this.txFromJSON<Result<Game>>,
+        get_admin: this.txFromJSON<string>,
+        set_admin: this.txFromJSON<null>,
+        start_game: this.txFromJSON<Result<void>>,
+        reveal_winner: this.txFromJSON<Result<string>>,
+        submit_commitment: this.txFromJSON<Result<void>>,
+        get_verification_key: this.txFromJSON<Option<VerificationKey>>,
+        set_verification_key: this.txFromJSON<null>
   }
 }
