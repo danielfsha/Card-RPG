@@ -116,9 +116,9 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
         >
           {/* Tooltip Bubble */}
           <div 
-            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white rounded-md border border-black px-4 py-1 flex flex-col items-center justify-center shadow-xl min-w-[60px] pointer-events-none"
+            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white rounded-md border border-black px-4 py-1 flex flex-col items-center justify-center shadow-xl min-w-[120px] pointer-events-none"
           >
-            <span className="text-black text-lg leading-tight font-bold">{formatValue(value)}</span>
+            <span className="text-black text-lg leading-tight font-bold">{`${formatValue(value)} XLM`}</span>
             {/* Tooltip Tail */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black">
                <div className="absolute -top-[7px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-white" />
