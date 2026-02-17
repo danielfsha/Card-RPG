@@ -1,7 +1,7 @@
 pragma circom 2.1.0;
 
-include "../../node_modules/circomlib/circuits/poseidon.circom";
-include "../../node_modules/circomlib/circuits/comparators.circom";
+include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
 include "./hand_ranking.circom";
 
 /**
@@ -117,4 +117,4 @@ template PokerGame() {
     winner <== (p1Wins + p1WinsHighCard) * 1 + (p2Wins + p2WinsHighCard) * 2;
 }
 
-component main {public [player1Commitment, player2Commitment, player1Cards, player2Cards]} = PokerGame();
+component main {public [player1Commitment, player2Commitment]} = PokerGame();

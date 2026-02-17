@@ -327,10 +327,10 @@ impl PockerContract {
         let proof_p1_commitment = public_signals.get(0).unwrap();
         let proof_p2_commitment = public_signals.get(1).unwrap();
 
-        if proof_p1_commitment != game.player1_commitment.as_ref().unwrap() {
+        if proof_p1_commitment != *game.player1_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
-        if proof_p2_commitment != game.player2_commitment.as_ref().unwrap() {
+        if proof_p2_commitment != *game.player2_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
 

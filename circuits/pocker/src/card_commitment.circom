@@ -1,6 +1,6 @@
 pragma circom 2.1.0;
 
-include "../../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/poseidon.circom";
 
 /**
  * Card Commitment Circuit
@@ -54,4 +54,4 @@ template CardCommitment() {
     commitment <== hasher.out;
 }
 
-component main {public [commitment]} = CardCommitment();
+component main = CardCommitment();
