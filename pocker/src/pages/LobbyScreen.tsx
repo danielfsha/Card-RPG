@@ -35,6 +35,8 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     if (!host && p1AuthEntryXDR && !isStarting && !hasImported) {
       console.log("[Guest] Received auth entry from host, auto-importing...");
       setHasImported(true);
+      // Cancel any countdown - we need to wait for transaction
+      setCountdown(null);
       handleGuestImportAndFinalize();
     }
   }, [host, p1AuthEntryXDR, isStarting, hasImported]);
@@ -166,9 +168,11 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       const ready = guestPlayers.every((p: any) => p.getState("ready") === true);
       setAllReady(ready);
 
-      // Only start countdown if guest is ready (host will click Start Game)
-      if (ready && countdown === null && !host) {
-        // Guest sees countdown when they're ready
+      // DISABLED: Countdown navigation conflicts with transaction-based game start
+      // The guest's transaction needs to complete before navigation
+      // Keeping countdown for visual feedback only
+      if (ready && countdown === null && !host && !isStarting) {
+        // Guest sees countdown when they're ready (visual only)
         setCountdown(5);
       } else if (!ready && countdown !== null) {
         // Reset countdown if guest becomes not ready
@@ -178,14 +182,18 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       setAllReady(false);
       setCountdown(null);
     }
-  }, [players, countdown, host]);
+  }, [players, countdown, host, isStarting]);
 
-  // Countdown timer
+  // Countdown timer - DISABLED for poker (transaction-based start)
+  // The countdown would navigate before the transaction completes
   useEffect(() => {
     if (countdown === null) return;
 
+    // Don't navigate on countdown - wait for transaction to complete
+    // The guest's handleGuestImportAndFinalize will call onStartGame when ready
     if (countdown === 0) {
-      onStartGame();
+      // Just stop the countdown, don't navigate
+      setCountdown(null);
       return;
     }
 
@@ -194,7 +202,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [countdown, onStartGame]);
+  }, [countdown]);
 
   const handleToggleReady = () => {
     setIsReady(!isReady);

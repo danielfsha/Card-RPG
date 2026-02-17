@@ -25,12 +25,20 @@ export function GameScreen({ onBack }: GameScreenProps) {
 
   // Load game state
   useEffect(() => {
+    if (!sessionId || sessionId === 0) {
+      console.warn("[GameScreen] Invalid session ID:", sessionId);
+      setLoading(false);
+      return;
+    }
+
     let pollCount = 0;
-    const MAX_POLLS = 20; // 20 polls * 3 seconds = 60 seconds max wait
+    const MAX_POLLS = 30; // 30 polls * 3 seconds = 90 seconds max wait
+    let pollInterval: NodeJS.Timeout;
     
     const loadGame = async () => {
       try {
-        console.log("[GameScreen] Loading game for session:", sessionId, `(poll ${pollCount + 1}/${MAX_POLLS})`);
+        pollCount++;
+        console.log("[GameScreen] Loading game for session:", sessionId, `(poll ${pollCount}/${MAX_POLLS})`);
         
         const { PockerService } = await import("../games/pocker/pockerService");
         const { POCKER_CONTRACT } = await import("../utils/constants");
@@ -39,38 +47,39 @@ export function GameScreen({ onBack }: GameScreenProps) {
         const game = await pockerService.getGame(sessionId);
         
         if (game) {
-          console.log("[GameScreen] Game loaded:", game);
+          console.log("[GameScreen] ✅ Game loaded successfully:", game);
           setGameState(game);
           setLoading(false);
+          if (pollInterval) clearInterval(pollInterval);
         } else {
-          pollCount++;
           if (pollCount >= MAX_POLLS) {
-            console.error("[GameScreen] Game not found after maximum polling attempts");
-            toast.error("Game not found. The transaction may have failed.");
+            console.error("[GameScreen] ❌ Game not found after maximum polling attempts");
+            toast.error("Game not found. The transaction may have failed or is still being processed.");
             setLoading(false);
+            if (pollInterval) clearInterval(pollInterval);
           } else {
-            console.warn("[GameScreen] Game not found yet, will retry...");
+            console.warn(`[GameScreen] Game not found yet, will retry in 3s... (${pollCount}/${MAX_POLLS})`);
           }
         }
       } catch (err) {
         console.error("[GameScreen] Error loading game:", err);
-        pollCount++;
         if (pollCount >= MAX_POLLS) {
           toast.error("Failed to load game after multiple attempts");
           setLoading(false);
+          if (pollInterval) clearInterval(pollInterval);
         }
       }
     };
 
-    if (sessionId && sessionId !== 0) {
-      loadGame();
-      // Poll for updates every 3 seconds
-      const interval = setInterval(loadGame, 3000);
-      return () => clearInterval(interval);
-    } else {
-      console.warn("[GameScreen] Invalid session ID:", sessionId);
-      setLoading(false);
-    }
+    // Initial load
+    loadGame();
+    
+    // Poll for updates every 3 seconds
+    pollInterval = setInterval(loadGame, 3000);
+    
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [sessionId]);
 
   // Commit Phase: Generate hand and submit commitment
@@ -204,7 +213,19 @@ export function GameScreen({ onBack }: GameScreenProps) {
       <>
         <Header showBackButton onBack={onBack} />
         <div className="w-full min-h-screen flex items-center justify-center pt-20">
-          <div className="text-white text-2xl">Loading game...</div>
+          <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 text-center max-w-md">
+            <div className="text-white text-2xl mb-4">Loading game...</div>
+            <div className="text-white/70 text-sm mb-4">
+              Session ID: {sessionId || "Not set"}
+            </div>
+            <div className="text-white/50 text-xs mb-4">
+              Waiting for the blockchain to index the transaction.
+              This usually takes 5-15 seconds.
+            </div>
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          </div>
         </div>
       </>
     );
