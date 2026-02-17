@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { usePlayersList, myPlayer, isHost, getRoomCode } from "playroomkit";
 import GlossyButton from "../components/GlossyButton";
 import { useWallet } from "../hooks/useWallet";
+import { useGameEngine } from "../hooks/useGameEngine";
 import toast from "react-hot-toast";
 
 interface LobbyScreenProps {
@@ -9,12 +10,15 @@ interface LobbyScreenProps {
 }
 
 export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
-  const { publicKey } = useWallet();
+  const { publicKey, getContractSigner } = useWallet();
+  const { sessionId, startGame: initGameSession, setP1AuthEntryXDR, p1AuthEntryXDR } = useGameEngine();
   const players = usePlayersList(true);
   const me = myPlayer();
   const [isReady, setIsReady] = useState(false);
   const [allReady, setAllReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [hasImported, setHasImported] = useState(false);
   const host = isHost();
   const roomCode = getRoomCode() || "LOADING...";
 
@@ -26,24 +30,155 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     }
   }, [isReady, me, publicKey]);
 
-  // Check if all players are ready
+  // Guest: Auto-import auth entry when received from host
+  useEffect(() => {
+    if (!host && p1AuthEntryXDR && !isStarting && !hasImported) {
+      console.log("[Guest] Received auth entry from host, auto-importing...");
+      setHasImported(true);
+      handleGuestImportAndFinalize();
+    }
+  }, [host, p1AuthEntryXDR, isStarting, hasImported]);
+
+  const handleGuestImportAndFinalize = async () => {
+    setIsStarting(true);
+    try {
+      console.log("[Guest] Starting import and finalize process...");
+      
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT, NETWORK } = await import("../utils/constants");
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      const signer = getContractSigner();
+
+      // Parse auth entry to get game params
+      console.log("[Guest] Parsing auth entry...");
+      const gameParams = pockerService.parseAuthEntry(p1AuthEntryXDR);
+      
+      console.log("[Guest] Parsed game params:", gameParams);
+
+      // Ensure Player 2 (guest) is funded on testnet
+      if (NETWORK === 'testnet' && publicKey) {
+        try {
+          console.log("[Guest] Checking if Player 2 is funded on testnet...");
+          const horizonUrl = 'https://horizon-testnet.stellar.org';
+          const accountRes = await fetch(`${horizonUrl}/accounts/${publicKey}`);
+          
+          if (accountRes.status === 404) {
+            console.log("[Guest] Player 2 not funded, requesting from Friendbot...");
+            toast("Funding your account on testnet...", {
+              icon: "💰",
+              duration: 3000,
+            });
+            
+            const fundRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+            if (fundRes.ok) {
+              toast.success("Account funded!");
+              // Wait a moment for Horizon to index
+              await new Promise(r => setTimeout(r, 2000));
+            } else {
+              throw new Error("Failed to fund account. Please fund your wallet manually.");
+            }
+          } else {
+            console.log("[Guest] Player 2 already funded");
+          }
+        } catch (err) {
+          console.error("[Guest] Error checking/funding account:", err);
+          throw new Error("Account funding required. Please fund your testnet wallet.");
+        }
+      }
+
+      // Default points: 0.1 XLM = 1000000 stroops
+      const points = BigInt(1000000);
+
+      console.log("[Guest] Importing and signing auth entry...");
+      // Import and sign as Player 2
+      const fullTxXDR = await pockerService.importAndSignAuthEntry(
+        p1AuthEntryXDR,
+        publicKey!,
+        points,
+        signer,
+      );
+
+      console.log("[Guest] Transaction signed, finalizing and submitting...");
+
+      // Finalize and submit
+      const sentTx = await pockerService.finalizeStartGame(
+        fullTxXDR,
+        publicKey!,
+        signer,
+      );
+
+      console.log("[Guest] Transaction submitted! Checking status...");
+      
+      // Check transaction status
+      if (sentTx.getTransactionResponse?.status === 'FAILED') {
+        throw new Error('Transaction failed on-chain. Check console for details.');
+      }
+      
+      if (sentTx.getTransactionResponse?.status === 'SUCCESS') {
+        console.log("[Guest] Transaction successful!");
+        toast.success("Game created successfully!");
+      } else {
+        console.log("[Guest] Transaction status:", sentTx.getTransactionResponse?.status);
+      }
+      
+      // Wait longer for the transaction to be fully processed and indexed
+      await new Promise(r => setTimeout(r, 5000));
+      
+      // Verify game was created before navigating
+      const { PockerService: VerifyService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT: VerifyContract } = await import("../utils/constants");
+      const verifyService = new VerifyService(VerifyContract);
+      
+      let gameCreated = false;
+      for (let i = 0; i < 5; i++) {
+        const game = await verifyService.getGame(gameParams.sessionId);
+        if (game) {
+          console.log("[Guest] Game verified on-chain!");
+          gameCreated = true;
+          break;
+        }
+        console.log(`[Guest] Game not found yet, retrying (${i + 1}/5)...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      
+      if (!gameCreated) {
+        throw new Error("Game was not created on-chain. Transaction may have failed.");
+      }
+      
+      onStartGame();
+
+    } catch (err: any) {
+      console.error("[Guest] Error importing auth entry:", err);
+      console.error("[Guest] Error stack:", err.stack);
+      toast.error(err.message || "Failed to join game");
+      setIsStarting(false);
+      setHasImported(false); // Allow retry
+    }
+  };
+
+  // Check if all players are ready (only guests need to be ready, host starts manually)
   useEffect(() => {
     if (players.length === 2) {
-      const ready = players.every((p: any) => p.getState("ready") === true);
+      // For guests: check if they're ready
+      // For host: they control start manually
+      const guestPlayers = players.filter((p: any) => p.id !== players[0]?.id);
+      const ready = guestPlayers.every((p: any) => p.getState("ready") === true);
       setAllReady(ready);
 
-      // Start countdown when all ready
-      if (ready && countdown === null) {
+      // Only start countdown if guest is ready (host will click Start Game)
+      if (ready && countdown === null && !host) {
+        // Guest sees countdown when they're ready
         setCountdown(5);
       } else if (!ready && countdown !== null) {
-        // Reset countdown if anyone becomes not ready
+        // Reset countdown if guest becomes not ready
         setCountdown(null);
       }
     } else {
       setAllReady(false);
       setCountdown(null);
     }
-  }, [players, countdown]);
+  }, [players, countdown, host]);
 
   // Countdown timer
   useEffect(() => {
@@ -65,6 +200,120 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     setIsReady(!isReady);
   };
 
+  const handleHostStartGame = async () => {
+    if (players.length < 2) {
+      toast.error("Need 2 players to start");
+      return;
+    }
+
+    setIsStarting(true);
+    try {
+      // Initialize game session (generates session ID)
+      initGameSession();
+
+      // Import the service dynamically to avoid circular deps
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT, NETWORK } = await import("../utils/constants");
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      const signer = getContractSigner();
+
+      // Get player addresses
+      const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
+      const player1 = sortedPlayers[0].getState("address") || publicKey;
+      const player2 = sortedPlayers[1].getState("address");
+
+      if (!player2 || !player1) {
+        toast.error("Player addresses not found");
+        setIsStarting(false);
+        return;
+      }
+
+      console.log("[Host] Preparing game with:", { sessionId, player1, player2 });
+
+      // Ensure Player 1 is funded on testnet
+      if (NETWORK === 'testnet') {
+        try {
+          console.log("[Host] Checking if Player 1 is funded on testnet...");
+          const horizonUrl = 'https://horizon-testnet.stellar.org';
+          const accountRes = await fetch(`${horizonUrl}/accounts/${player1}`);
+          
+          if (accountRes.status === 404) {
+            console.log("[Host] Player 1 not funded, requesting from Friendbot...");
+            toast("Funding your account on testnet...", {
+              icon: "💰",
+              duration: 3000,
+            });
+            
+            const fundRes = await fetch(`https://friendbot.stellar.org?addr=${player1}`);
+            if (fundRes.ok) {
+              toast.success("Account funded!");
+              // Wait a moment for Horizon to index
+              await new Promise(r => setTimeout(r, 2000));
+            } else {
+              console.warn("[Host] Friendbot funding failed, continuing anyway...");
+            }
+          } else {
+            console.log("[Host] Player 1 already funded");
+          }
+        } catch (err) {
+          console.warn("[Host] Error checking/funding account:", err);
+          // Continue anyway - might work
+        }
+      }
+
+      // Default points: 0.1 XLM = 1000000 stroops
+      const points = BigInt(1000000);
+
+      // Use player2 as the transaction source for simulation
+      // This is a placeholder - the actual transaction will be rebuilt by player2
+      console.log("[Host] Using player2 as simulation source:", player2);
+
+      // Host (Player 1) creates and signs auth entry
+      const authEntryXDR = await pockerService.prepareStartGame(
+        sessionId,
+        player1,
+        player2, // Player 2 will be the transaction source
+        points,
+        points,
+        signer,
+      );
+
+      console.log("[Host] Auth entry created, sharing via Playroom");
+      
+      // Share auth entry with Player 2 via Playroom
+      setP1AuthEntryXDR(authEntryXDR);
+
+      toast.success("Auth entry shared! Waiting for Player 2...");
+
+      // Poll for game creation (Player 2 will finalize)
+      const pollInterval = setInterval(async () => {
+        try {
+          const game = await pockerService.getGame(sessionId);
+          if (game) {
+            console.log("[Host] Game created by Player 2!");
+            clearInterval(pollInterval);
+            toast.success("Game started!");
+            onStartGame();
+          }
+        } catch (err) {
+          // Keep polling
+        }
+      }, 3000);
+
+      // Stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setIsStarting(false);
+      }, 300000);
+
+    } catch (err: any) {
+      console.error("[Host] Error starting game:", err);
+      toast.error(err.message || "Failed to start game");
+      setIsStarting(false);
+    }
+  };
+
   const copyRoomCode = () => {
     const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
     navigator.clipboard.writeText(url);
@@ -84,7 +333,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
             Room Code
           </div>
           <div className="flex items-center justify-center gap-4">
-            <div className="text-white text-2xl font-mono tracking-wider font-bold">
+            <div className="text-white text-6xl tracking-wider font-bold">
               {roomCode}
             </div>
             <button
@@ -185,23 +434,29 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
           </div>
         )}
 
-        {/* Ready Button */}
+        {/* Ready/Start Button */}
         <div className="flex flex-col gap-4">
-          <GlossyButton
-            onClick={handleToggleReady}
-            disabled={players.length < 2 || countdown !== null}
-            className={`w-full ${
-              isReady
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-green-600 hover:bg-green-700"
-            }`}
-          >
-            {isReady ? "Not Ready" : "Ready"}
-          </GlossyButton>
-
-          {host && players.length === 2 && allReady && countdown === null && (
-            <GlossyButton onClick={onStartGame} className="w-full">
-              Start Game Now
+          {host ? (
+            // Host sees "Start Game" button
+            <GlossyButton
+              onClick={handleHostStartGame}
+              disabled={players.length < 2 || countdown !== null || isStarting}
+              className="w-full bg-green-600 hover:bg-green-700"
+            >
+              {isStarting ? "Starting..." : "Start Game"}
+            </GlossyButton>
+          ) : (
+            // Guest sees "Ready" toggle button
+            <GlossyButton
+              onClick={handleToggleReady}
+              disabled={players.length < 2 || countdown !== null}
+              className={`w-full ${
+                isReady
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              {isReady ? "Not Ready" : "Ready"}
             </GlossyButton>
           )}
         </div>

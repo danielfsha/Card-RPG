@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { insertCoin } from "playroomkit";
 import { Toaster } from "react-hot-toast";
 import { useWallet } from "../src/hooks/useWallet";
+import { GameEngineProvider } from "./hooks/useGameEngine";
 import { SplashScreen } from "./pages/SplashScreen";
 import { ModeSelectScreen } from "./pages/ModeSelectScreen";
 import { SettingsScreen } from "./pages/SettingsScreen";
 import { LobbyScreen } from "./pages/LobbyScreen";
+import { GameScreen } from "./pages/GameScreen";
 
 function App() {
   const { publicKey, isConnected, isConnecting, connect, error } = useWallet();
@@ -58,6 +60,11 @@ function App() {
     setGameStarted(true);
   };
 
+  const handleBackToLobby = () => {
+    setGameStarted(false);
+    setInLobby(true);
+  };
+
   const handleConnect = async () => {
     if (connect) {
       await connect();
@@ -90,20 +97,21 @@ function App() {
   }, [isConnected]);
 
   return (
-    <div className="min-h-screen bg-[url(/background.png)] ">
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#1f2937',
-            color: '#fff',
-            fontFamily: 'var(--font-slab)',
-            fontWeight: 700,
-          },
-        }}
-      />
-      {!isConnected ? (
+    <GameEngineProvider>
+      <div className="min-h-screen bg-[url(/background.png)] ">
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: '#1f2937',
+              color: '#fff',
+              fontFamily: 'var(--font-slab)',
+              fontWeight: 700,
+            },
+          }}
+        />
+        {!isConnected ? (
         <SplashScreen onConnect={handleConnect} error={error} isConnecting={isConnecting} />
       ) : isSettingsOpen ? (
         <SettingsScreen onBack={() => setIsSettingsOpen(false)} />
@@ -116,18 +124,10 @@ function App() {
       ) : inLobby ? (
         <LobbyScreen onStartGame={handleStartGameFromLobby} />
       ) : gameStarted ? (
-        // Game Loaded - Placeholder for actual poker game
-        <div className="w-full min-h-screen flex flex-col items-center justify-center p-4">
-          <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 text-center">
-            <h3 className="text-white text-3xl mb-6 font-bold">
-              GAME STARTING
-            </h3>
-            <p className="text-white/70 mb-4">Mode: {gameMode}</p>
-            <p className="text-white/70">Poker game will load here...</p>
-          </div>
-        </div>
+        <GameScreen onBack={handleBackToLobby} />
       ) : null}
-    </div>
+      </div>
+    </GameEngineProvider>
   );
 }
 
