@@ -1,0 +1,52 @@
+
+import React from 'react';
+
+interface GlossyButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  children: React.ReactNode;
+  icon?: 'play' | 'plus';
+}
+
+const GlossyButton = React.forwardRef<HTMLButtonElement, GlossyButtonProps>(
+  ({ children, icon, className, style, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={`group relative flex items-center justify-center px-6 py-4 rounded-xl transition-all active:scale-95 select-none uppercase ${className || ''}`}
+        style={{
+          background: 'linear-gradient(to bottom, #333 0%, #111 45%, #000 50%, #111 100%)',
+          border: '3px solid #222',
+          boxShadow: `
+            0 4px 6px -1px rgba(0, 0, 0, 0.5),
+            0 10px 15px -3px rgba(0, 0, 0, 0.4),
+            inset 0 1px 1px rgba(255, 255, 255, 0.3),
+            inset 0 -1px 1px rgba(0, 0, 0, 0.5)
+          `,
+          ...style
+        }}
+        {...props}
+      >
+        {/* Top Gloss Highlight */}
+        <div className="absolute top-[2px] left-[4px] right-[4px] h-[40%] bg-linear-to-b from-white/10 to-transparent rounded-t-lg pointer-events-none" />
+
+        <div className="flex items-center space-x-3 z-10">
+          {icon === 'play' && (
+            <div className="w-0 h-0 border-t-10 border-t-transparent border-l-16 border-l-white border-b-10 border-b-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]" />
+          )}
+          {icon === 'plus' && (
+            <div className="relative w-6 h-6 flex items-center justify-center bg-[#222] border border-white/20 rounded shadow-inner">
+               <span className="text-white font-bold text-xl leading-none">+</span>
+            </div>
+          )}
+          <span className="text-white text-2xl tracking-wider drop-shadow-[0_2px_2px_rgba(0,0,0,1)] font-bold">
+            {children}
+          </span>
+        </div>
+      </button>
+    );
+  }
+);
+
+GlossyButton.displayName = 'GlossyButton';
+
+export default GlossyButton;
+
