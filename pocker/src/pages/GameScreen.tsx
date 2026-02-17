@@ -73,22 +73,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
     }
   }, [sessionId]);
 
-  const handleMakeGuess = async (guess: number) => {
-    try {
-      const { PockerService } = await import("../games/pocker/pockerService");
-      const { POCKER_CONTRACT } = await import("../utils/constants");
-      
-      const pockerService = new PockerService(POCKER_CONTRACT);
-      const signer = useWallet().getContractSigner();
-      
-      await pockerService.makeGuess(sessionId, publicKey!, guess, signer);
-      toast.success(`Guessed ${guess}!`);
-    } catch (err: any) {
-      console.error("[GameScreen] Error making guess:", err);
-      toast.error(err.message || "Failed to make guess");
-    }
-  };
-
   // Commit Phase: Generate hand and submit commitment
   const handleCommit = async () => {
     try {
@@ -173,6 +157,13 @@ export function GameScreen({ onBack }: GameScreenProps) {
       // Serialize proof for contract
       const serializedProof = zkService.serializeProof(proofData.proof);
       
+      // Serialize public signals as Buffers
+      const publicSignalsBuffers = proofData.publicSignals.map((signal: string) => {
+        const bn = BigInt(signal);
+        const hex = bn.toString(16).padStart(64, '0');
+        return Buffer.from(hex, 'hex');
+      });
+      
       // Submit to contract
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
@@ -181,8 +172,9 @@ export function GameScreen({ onBack }: GameScreenProps) {
       const pockerService = new PockerService(POCKER_CONTRACT);
       await pockerService.revealWinner(
         sessionId,
+        publicKey!,
         serializedProof,
-        proofData.publicSignals,
+        publicSignalsBuffers,
         signer
       );
       

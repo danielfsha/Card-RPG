@@ -29,7 +29,7 @@ export class ZKPokerService {
       console.log('[ZKPokerService] ✅ Initialized successfully');
     } catch (err) {
       console.error('[ZKPokerService] Failed to initialize:', err);
-      throw new Error('Failed to initialize ZK service');
+      throw new Error(`Failed to initialize ZK service: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
@@ -177,31 +177,46 @@ export class ZKPokerService {
    * Serialize proof for Soroban contract
    * Converts snarkjs proof format to contract-compatible format
    * 
+   * Contract expects:
+   * - pi_a: BytesN<64> (G1 point: 32 bytes x + 32 bytes y)
+   * - pi_b: BytesN<128> (G2 point: 32 bytes x1 + 32 bytes x2 + 32 bytes y1 + 32 bytes y2)
+   * - pi_c: BytesN<64> (G1 point: 32 bytes x + 32 bytes y)
+   * 
    * @param proof - Proof from snarkjs
-   * @returns Serialized proof object
+   * @returns Serialized proof object with Buffers
    */
   serializeProof(proof: any): {
-    pi_a: string[];
-    pi_b: string[];
-    pi_c: string[];
+    pi_a: Buffer;
+    pi_b: Buffer;
+    pi_c: Buffer;
   } {
-    // Groth16 proof structure:
-    // pi_a: G1 point (2 elements: x, y)
-    // pi_b: G2 point (4 elements: x1, x2, y1, y2)
-    // pi_c: G1 point (2 elements: x, y)
-    
-    const proofData = {
-      pi_a: proof.pi_a.slice(0, 2).map((v: string) => v.toString()),
-      pi_b: [
-        ...proof.pi_b[0].slice(0, 2).map((v: string) => v.toString()),
-        ...proof.pi_b[1].slice(0, 2).map((v: string) => v.toString())
-      ],
-      pi_c: proof.pi_c.slice(0, 2).map((v: string) => v.toString())
+    const bigIntToBuffer32 = (value: string): Buffer => {
+      const bn = BigInt(value);
+      const hex = bn.toString(16).padStart(64, '0');
+      return Buffer.from(hex, 'hex');
     };
+
+    const pi_a_x = bigIntToBuffer32(proof.pi_a[0]);
+    const pi_a_y = bigIntToBuffer32(proof.pi_a[1]);
+    const pi_a = Buffer.concat([pi_a_x, pi_a_y]);
+
+    const pi_b_x1 = bigIntToBuffer32(proof.pi_b[0][1]);
+    const pi_b_x2 = bigIntToBuffer32(proof.pi_b[0][0]);
+    const pi_b_y1 = bigIntToBuffer32(proof.pi_b[1][1]);
+    const pi_b_y2 = bigIntToBuffer32(proof.pi_b[1][0]);
+    const pi_b = Buffer.concat([pi_b_x1, pi_b_x2, pi_b_y1, pi_b_y2]);
+
+    const pi_c_x = bigIntToBuffer32(proof.pi_c[0]);
+    const pi_c_y = bigIntToBuffer32(proof.pi_c[1]);
+    const pi_c = Buffer.concat([pi_c_x, pi_c_y]);
     
-    console.log('[ZKPokerService] Serialized proof:', proofData);
+    console.log('[ZKPokerService] Serialized proof lengths:', {
+      pi_a: pi_a.length,
+      pi_b: pi_b.length,
+      pi_c: pi_c.length
+    });
     
-    return proofData;
+    return { pi_a, pi_b, pi_c };
   }
 
   /**

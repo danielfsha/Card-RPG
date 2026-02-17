@@ -4,8 +4,11 @@ import { Buffer } from "buffer";
 import "./index.css";
 import App from "./App.tsx";
 
-// Polyfill Buffer for Stellar SDK
-window.Buffer = Buffer;
+// Polyfill Buffer for Stellar SDK and circomlibjs
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+  (window as any).global = window;
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -407,7 +407,6 @@ export class PockerService {
   ) {
     const client = this.createSigningClient(playerAddress, signer);
     
-    // Convert commitment string to Bytes
     const commitmentBytes = Buffer.from(commitment, 'utf-8');
     
     const tx = await client.submit_commitment(
@@ -436,28 +435,19 @@ export class PockerService {
    */
   async revealWinner(
     sessionId: number,
-    proof: { pi_a: string[]; pi_b: string[]; pi_c: string[] },
-    publicSignals: string[],
+    playerAddress: string,
+    proof: { pi_a: Buffer; pi_b: Buffer; pi_c: Buffer },
+    publicSignals: Buffer[],
     signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
     authTtlMinutes?: number,
   ) {
-    // Use any player address for the client (proof verification is permissionless)
-    const client = this.createSigningClient(publicSignals[0], signer);
-    
-    // Convert proof to contract format
-    const proofData = {
-      pi_a: proof.pi_a.map(v => Buffer.from(v)),
-      pi_b: proof.pi_b.map(v => Buffer.from(v)),
-      pi_c: proof.pi_c.map(v => Buffer.from(v)),
-    };
-    
-    const publicSignalsBytes = publicSignals.map(s => Buffer.from(s, 'utf-8'));
+    const client = this.createSigningClient(playerAddress, signer);
     
     const tx = await client.reveal_winner(
       {
         session_id: sessionId,
-        proof: proofData,
-        public_signals: publicSignalsBytes,
+        proof: proof,
+        public_signals: publicSignals,
       },
       DEFAULT_METHOD_OPTIONS,
     );
