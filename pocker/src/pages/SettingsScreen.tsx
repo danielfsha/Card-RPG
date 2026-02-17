@@ -28,42 +28,49 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
   return (
     <div className="w-full min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 w-full max-w-md">
+      <div className="bg-gradient-to-br from-gray-900 to-green-900 border-2 border-white/20 text-white p-8 w-full max-w-2xl rounded-sm">
         <h3 className="text-white text-3xl mb-8 text-center font-bold">
           SETTINGS
         </h3>
 
-        <div className="mb-8">
-          <div className="text-white/70 text-sm mb-2">Connected Address:</div>
-          <div className="flex items-center gap-2">
-            <div className="text-white text-xl break-all flex-1">
-              {truncatePublicKey(publicKey)}
-            </div>
-            <button
-              onClick={copyWalletAddress}
-              className="h-10 w-10 p-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors flex-shrink-0"
-              title="Copy wallet address"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 512 512"
-                className="fill-white"
+        <div className="mb-8 space-y-3">
+          <div className="text-white/70 text-sm text-center">Connected Wallet</div>
+          <div className="p-4">
+            <div className="flex items-center justify-center gap-4">
+              <div className="text-white text-2xl text-center">
+                {truncatePublicKey(publicKey)}
+              </div>
+              <GlossyButton
+                onClick={copyWalletAddress}
+                className="px-4 py-3 bg-blue-600 hover:bg-blue-700"
+                title="Copy wallet address"
               >
-                <path d="M 416 336 L 224 336 L 416 336 L 224 336 Q 209 335 208 320 L 208 64 L 208 64 Q 209 49 224 48 L 364 48 L 364 48 L 432 116 L 432 116 L 432 320 L 432 320 Q 431 335 416 336 L 416 336 Z M 224 384 L 416 384 L 224 384 L 416 384 Q 443 383 461 365 Q 479 347 480 320 L 480 116 L 480 116 Q 480 96 466 82 L 398 14 L 398 14 Q 384 0 364 0 L 224 0 L 224 0 Q 197 1 179 19 Q 161 37 160 64 L 160 320 L 160 320 Q 161 347 179 365 Q 197 383 224 384 L 224 384 Z M 96 128 Q 69 129 51 147 L 51 147 L 51 147 Q 33 165 32 192 L 32 448 L 32 448 Q 33 475 51 493 Q 69 511 96 512 L 288 512 L 288 512 Q 315 511 333 493 Q 351 475 352 448 L 352 416 L 352 416 L 304 416 L 304 416 L 304 448 L 304 448 Q 303 463 288 464 L 96 464 L 96 464 Q 81 463 80 448 L 80 192 L 80 192 Q 81 177 96 176 L 128 176 L 128 176 L 128 128 L 128 128 L 96 128 L 96 128 Z" />
-              </svg>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 438 511.52"
+                  fill="currentColor"
+                >
+                  <path fillRule="nonzero" d="M141.44 0h172.68c4.71 0 8.91 2.27 11.54 5.77L434.11 123.1a14.37 14.37 0 0 1 3.81 9.75l.08 251.18c0 17.62-7.25 33.69-18.9 45.36l-.07.07c-11.67 11.64-27.73 18.87-45.33 18.87h-20.06c-.3 17.24-7.48 32.9-18.88 44.29-11.66 11.66-27.75 18.9-45.42 18.9H64.3c-17.67 0-33.76-7.24-45.41-18.9C7.24 480.98 0 464.9 0 447.22V135.87c0-17.68 7.23-33.78 18.88-45.42C30.52 78.8 46.62 71.57 64.3 71.57h12.84V64.3c0-17.68 7.23-33.78 18.88-45.42C107.66 7.23 123.76 0 141.44 0zm30.53 250.96c-7.97 0-14.43-6.47-14.43-14.44 0-7.96 6.46-14.43 14.43-14.43h171.2c7.97 0 14.44 6.47 14.44 14.43 0 7.97-6.47 14.44-14.44 14.44h-171.2zm0 76.86c-7.97 0-14.43-6.46-14.43-14.43 0-7.96 6.46-14.43 14.43-14.43h136.42c7.97 0 14.43 6.47 14.43 14.43 0 7.97-6.46 14.43-14.43 14.43H171.97zM322.31 44.44v49.03c.96 12.3 5.21 21.9 12.65 28.26 7.8 6.66 19.58 10.41 35.23 10.69l33.39-.04-81.27-87.94zm86.83 116.78-39.17-.06c-22.79-.35-40.77-6.5-53.72-17.57-13.48-11.54-21.1-27.86-22.66-48.03l-.14-2v-64.7H141.44c-9.73 0-18.61 4-25.03 10.41C110 45.69 106 54.57 106 64.3v319.73c0 9.74 4.01 18.61 10.42 25.02 6.42 6.42 15.29 10.42 25.02 10.42H373.7c9.75 0 18.62-3.98 25.01-10.38 6.45-6.44 10.43-15.3 10.43-25.06V161.22zm-84.38 287.11H141.44c-17.68 0-33.77-7.24-45.41-18.88-11.65-11.65-18.89-27.73-18.89-45.42v-283.6H64.3c-9.74 0-18.61 4-25.03 10.41-6.41 6.42-10.41 15.29-10.41 25.03v311.35c0 9.73 4.01 18.59 10.42 25.01 6.43 6.43 15.3 10.43 25.02 10.43h225.04c9.72 0 18.59-4 25.02-10.43 6.17-6.17 10.12-14.61 10.4-23.9z"/>
+                </svg>
+              </GlossyButton>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col space-y-4">
+        <div className="flex flex-col gap-4 pt-4">
           <GlossyButton
             onClick={handleDisconnect}
-            className="w-full"
+            className="w-full bg-red-600 hover:bg-red-700 py-4"
           >
             Disconnect Wallet
           </GlossyButton>
 
-          <GlossyButton onClick={onBack} className="w-full">
+          <GlossyButton 
+            onClick={onBack} 
+            className="w-full bg-gray-600 hover:bg-gray-700 py-4"
+          >
             Back to Menu
           </GlossyButton>
         </div>
