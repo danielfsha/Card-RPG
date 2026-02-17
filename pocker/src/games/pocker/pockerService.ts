@@ -289,6 +289,11 @@ export class PockerService {
       throw new Error("Cannot play against yourself");
     }
 
+    // Small delay to allow network state to settle after Player 1's auth entry
+    // This helps prevent nonce collisions
+    console.log("[importAndSignAuthEntry] Waiting for network to settle...");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     const buildClient = new PockerClient({
       contractId: this.contractId,
       networkPassphrase: NETWORK_PASSPHRASE,
@@ -296,91 +301,67 @@ export class PockerService {
       publicKey: player2Address,
     });
 
-    let tx: any | undefined;
-    let retries = 8; // Increased retries
-    let lastError;
+    console.log("[importAndSignAuthEntry] Building transaction...");
+    
+    try {
+      const tx = await buildClient.start_game(
+        {
+          session_id: gameParams.sessionId,
+          player1: gameParams.player1,
+          player2: player2Address,
+          player1_points: gameParams.player1Points,
+          player2_points: player2Points,
+        },
+        DEFAULT_METHOD_OPTIONS,
+      );
 
-    while (retries > 0) {
-      try {
-        console.log(`[importAndSignAuthEntry] Building transaction (attempts left: ${retries})...`);
+      console.log("[importAndSignAuthEntry] ✅ Transaction built successfully");
 
-        // Add exponential backoff with jitter
-        if (retries < 8) {
-          const baseDelay = 1000 * (8 - retries); // Exponential: 1s, 2s, 3s, etc.
-          const jitter = Math.floor(Math.random() * 2000); // Random 0-2s
-          const delay = baseDelay + jitter;
-          console.log(`[importAndSignAuthEntry] Waiting ${delay}ms before retry...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-
-        tx = await buildClient.start_game(
-          {
-            session_id: gameParams.sessionId,
-            player1: gameParams.player1,
-            player2: player2Address,
-            player1_points: gameParams.player1Points,
-            player2_points: player2Points,
-          },
-          DEFAULT_METHOD_OPTIONS,
-        );
-
-        console.log("[importAndSignAuthEntry] ✅ Transaction built successfully");
-        break;
-      } catch (err: any) {
-        lastError = err;
-        console.warn("[importAndSignAuthEntry] Simulation failed:", err.message);
-
-        if (
-          err.message &&
-          (err.message.includes("nonce already exists") ||
-            err.message.includes("Auth, ExistingValue") ||
-            err.message.includes("HostError"))
-        ) {
-          console.log("[importAndSignAuthEntry] Detected nonce collision, will retry...");
-          retries--;
-          
-          if (retries === 0) {
-            console.error("[importAndSignAuthEntry] All retries exhausted");
-            throw new Error(
-              "Failed to build transaction after multiple attempts. " +
-              "This can happen when the network is busy. Please try again in a few seconds."
-            );
-          }
-        } else {
-          // Non-nonce error, throw immediately
-          throw err;
-        }
+      if (!tx) {
+        throw new Error("Failed to build transaction");
       }
+
+      const validUntilLedgerSeq = authTtlMinutes
+        ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
+        : await calculateValidUntilLedger(RPC_URL, MULTI_SIG_AUTH_TTL_MINUTES);
+
+      const txWithInjectedAuth = await injectSignedAuthEntry(
+        tx,
+        player1SignedAuthEntryXdr,
+        player2Address,
+        player2Signer,
+        validUntilLedgerSeq,
+      );
+
+      const player2Client = this.createSigningClient(player2Address, player2Signer);
+      const player2Tx = player2Client.txFromXDR(txWithInjectedAuth.toXDR());
+
+      const needsSigning = await player2Tx.needsNonInvokerSigningBy();
+
+      if (needsSigning.includes(player2Address)) {
+        console.log("[importAndSignAuthEntry] Signing Player 2 auth entry");
+        await player2Tx.signAuthEntries({ expiration: validUntilLedgerSeq });
+      }
+
+      return player2Tx.toXDR();
+    } catch (err: any) {
+      console.error("[importAndSignAuthEntry] Error:", err);
+      
+      // Check if it's a nonce collision error
+      if (
+        err.message &&
+        (err.message.includes("nonce already exists") ||
+          err.message.includes("Auth, ExistingValue"))
+      ) {
+        throw new Error(
+          "The auth entry from Player 1 has expired or been used. " +
+          "Please ask Player 1 to generate a new auth entry and try again. " +
+          "This can happen if too much time has passed or if the entry was used in another transaction."
+        );
+      }
+      
+      throw err;
     }
-
-    if (!tx) {
-      if (lastError) throw lastError;
-      throw new Error("Failed to build transaction");
-    }
-
-    const validUntilLedgerSeq = authTtlMinutes
-      ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
-      : await calculateValidUntilLedger(RPC_URL, MULTI_SIG_AUTH_TTL_MINUTES);
-
-    const txWithInjectedAuth = await injectSignedAuthEntry(
-      tx,
-      player1SignedAuthEntryXdr,
-      player2Address,
-      player2Signer,
-      validUntilLedgerSeq,
-    );
-
-    const player2Client = this.createSigningClient(player2Address, player2Signer);
-    const player2Tx = player2Client.txFromXDR(txWithInjectedAuth.toXDR());
-
-    const needsSigning = await player2Tx.needsNonInvokerSigningBy();
-
-    if (needsSigning.includes(player2Address)) {
-      console.log("[importAndSignAuthEntry] Signing Player 2 auth entry");
-      await player2Tx.signAuthEntries({ expiration: validUntilLedgerSeq });
-    }
-
-    return player2Tx.toXDR();
   }
 
   /**
@@ -395,7 +376,8 @@ export class PockerService {
     const client = this.createSigningClient(signerAddress, signer);
     const tx = client.txFromXDR(xdr);
 
-    await tx.simulate();
+    // Don't simulate again - the transaction was already simulated in importAndSignAuthEntry
+    // Simulating again would cause a nonce collision error
 
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
