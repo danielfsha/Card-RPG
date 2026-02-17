@@ -1,0 +1,263 @@
+[
+  {
+    "Name": "Gristle Golem",
+    "Level": 6,
+    "ATK": 2100,
+    "DEF": 2300,
+    "Species": "Gristle",
+    "Description": "A semi-sentient heap of regenerative tissue harvested from the pits of the Under-Labs.",
+    "image": "gristle-golem"
+  },
+  {
+    "Name": "Zinc Mosquito",
+    "Level": 1,
+    "ATK": 400,
+    "DEF": 700,
+    "Species": "Zinc",
+    "Description": "These metallic parasites thrive in industrial zones, drinking leaked hydraulic fluid.",
+    "image": "zinc-mosquito"
+  },
+  {
+    "Name": "Shatter-Star",
+    "Level": 7,
+    "ATK": 2500,
+    "DEF": 600,
+    "Species": "Shatter",
+    "Description": "A crystalline organism born from the high-pressure atmosphere of a dying gas giant.",
+    "image": "shatter-star"
+  },
+  {
+    "Name": "Obsidian Sentinel",
+    "Level": 4,
+    "ATK": 1600,
+    "DEF": 1900,
+    "Species": "Obsidian",
+    "Description": "Ancient volcanic rock imbued with a primitive, aggressive nervous system.",
+    "image": "obsidian-sentinel"
+  },
+  {
+    "Name": "Vibe Checker",
+    "Level": 4,
+    "ATK": 1300,
+    "DEF": 1400,
+    "Species": "Vibe",
+    "Description": "An astral entity that feeds exclusively on the emotional frequencies of nearby creatures.",
+    "image": "vibe-checker"
+  },
+  {
+    "Name": "Oil Slick",
+    "Level": 2,
+    "ATK": 1100,
+    "DEF": 800,
+    "Species": "Oil",
+    "Description": "An accidental mutation of ocean sludge, now capable of mimicry and basic locomotion.",
+    "image": "oil-slick"
+  },
+  {
+    "Name": "Anvil Drop",
+    "Level": 5,
+    "ATK": 500,
+    "DEF": 2500,
+    "Species": "Anvil",
+    "Description": "Massive, gravity-sensitive boulders carved into symbols of weight by ancient earth-cults.",
+    "image": "anvil-drop"
+  },
+  {
+    "Name": "Riot Grrrl",
+    "Level": 4,
+    "ATK": 1800,
+    "DEF": 1200,
+    "Species": "Riot",
+    "Description": "A sub-culture of sound-wielding humans who use sonic vibrations to disrupt physics.",
+    "image": "riot-grrrl"
+  },
+  {
+    "Name": "Dread Lobster",
+    "Level": 6,
+    "ATK": 2200,
+    "DEF": 2400,
+    "Species": "Dread",
+    "Description": "A crustacean from the Trench Era; its shell is reinforced with tectonic mineral deposits.",
+    "image": "dread-lobster"
+  },
+  {
+    "Name": "Papercut Pixie",
+    "Level": 1,
+    "ATK": 2400,
+    "DEF": 400,
+    "Species": "Papercut",
+    "Description": "Fae creatures composed of fibrous cellulose, hiding in plain sight among old scrolls.",
+    "image": "papercut-pixie"
+  },
+  {
+    "Name": "Concrete Dog",
+    "Level": 3,
+    "ATK": 800,
+    "DEF": 1900,
+    "Species": "Concrete",
+    "Description": "Stone-based hounds originally sculpted as guardians, brought to life by stray magic.",
+    "image": "concrete-dog"
+  },
+  {
+    "Name": "Banshee DJ",
+    "Level": 5,
+    "ATK": 1700,
+    "DEF": 1600,
+    "Species": "Banshee",
+    "Description": "A spectral species that communicates through rhythmic, ear-shattering frequency loops.",
+    "image": "banshee-dj"
+  },
+  {
+    "Name": "The Janitor",
+    "Level": 2,
+    "ATK": 1200,
+    "DEF": 1100,
+    "Species": "The",
+    "Description": "A specialized class of workers trained to handle hazardous multidimensional waste.",
+    "image": "the-janitor"
+  },
+  {
+    "Name": "Magma Mutt",
+    "Level": 4,
+    "ATK": 2100,
+    "DEF": 1000,
+    "Species": "Magma",
+    "Description": "Canines made of molten silicate; they pant smoke and leave trails of scorched glass.",
+    "image": "magma-mutt"
+  },
+  {
+    "Name": "Static Cat",
+    "Level": 1,
+    "ATK": 900,
+    "DEF": 500,
+    "Species": "Static",
+    "Description": "Felines that act as natural capacitors, storing lightning in their fur during storms.",
+    "image": "static-cat"
+  },
+  {
+    "Name": "Velvet Vampire",
+    "Level": 6,
+    "ATK": 2300,
+    "DEF": 1500,
+    "Species": "Velvet",
+    "Description": "Noble parasites who wear organic, sentient silk capes to camouflage their true forms.",
+    "image": "velvet-vampire"
+  },
+  {
+    "Name": "Hungry Hole",
+    "Level": 7,
+    "ATK": 600,
+    "DEF": 400,
+    "Species": "Hungry",
+    "Description": "A wandering rift in space-time that lacks a physical body but possesses a ravenous ego.",
+    "image": "hungry-hole"
+  },
+  {
+    "Name": "Neon Nomad",
+    "Level": 4,
+    "ATK": 1700,
+    "DEF": 1300,
+    "Species": "Neon",
+    "Description": "Cybernetic survivors who have replaced 90% of their organic parts with glowing light-tubes.",
+    "image": "neon-nomad"
+  },
+  {
+    "Name": "Lead Belly",
+    "Level": 5,
+    "ATK": 700,
+    "DEF": 2400,
+    "Species": "Lead",
+    "Description": "Heavy-set dwarves whose internal organs have been replaced by a functional smelting furnace.",
+    "image": "lead-belly"
+  },
+  {
+    "Name": "Fever Dream",
+    "Level": 3,
+    "ATK": 1200,
+    "DEF": 1200,
+    "Species": "Fever",
+    "Description": "Paradoxical beings that only exist when a sentient mind enters a state of deep delirium.",
+    "image": "fever-dream"
+  },
+  {
+    "Name": "Pesticide Pal",
+    "Level": 4,
+    "ATK": 1500,
+    "DEF": 1100,
+    "Species": "Pesticide",
+    "Description": "Chemical-warfare specialists who have lived in hazmat suits for so long they cannot breathe air.",
+    "image": "pesticide-pal"
+  },
+  {
+    "Name": "Basement Troll",
+    "Level": 3,
+    "ATK": 1600,
+    "DEF": 1400,
+    "Species": "Basement",
+    "Description": "A sub-species of subterranean cave-dwellers that evolved to hunt by the glow of phosphor.",
+    "image": "basement-troll"
+  },
+  {
+    "Name": "Balloon Popper",
+    "Level": 1,
+    "ATK": 2500,
+    "DEF": 400,
+    "Species": "Bird",
+    "Description": "A bird with a beak designed specifically to puncture tight surfaces.",
+    "image": "balloon-popper"
+  },
+  {
+    "Name": "Sleepy Panda",
+    "Level": 3,
+    "ATK": 500,
+    "DEF": 2500,
+    "Species": "Panda",
+    "Description": "An old discarded pail that has spent too much time in the rain forest.",
+    "image": "sleepy-panda"
+  },
+  {
+    "Name": "Soul Taxer",
+    "Level": 5,
+    "ATK": 2000,
+    "DEF": 2000,
+    "Species": "Soul",
+    "Description": "A bureaucratic race of demons who manage the flow of energy between various hell-realms.",
+    "image": "soul-taxer"
+  },
+  {
+    "Name": "Gravity Moth",
+    "Level": 6,
+    "ATK": 1500,
+    "DEF": 2500,
+    "Species": "Gravity",
+    "Description": "Insects that generate their own localized mass, making the air around them feel like lead.",
+    "image": "gravity-moth"
+  },
+  {
+    "Name": "Cinder Child",
+    "Level": 1,
+    "ATK": 900,
+    "DEF": 700,
+    "Species": "Cinder",
+    "Description": "Small, glowing embers that have taken on a humanoid shape to stay warm in the cold.",
+    "image": "cinder-child"
+  },
+  {
+    "Name": "Drunken Master",
+    "Level": 4,
+    "ATK": 2100,
+    "DEF": 1100,
+    "Species": "Drunken",
+    "Description": "Fighters who use fermented nectar to enter a state of unpredictable, fluid combat.",
+    "image": "drunken-master"
+  },
+  {
+    "Name": "Memory Leak",
+    "Level": 7,
+    "ATK": 2500,
+    "DEF": 2500,
+    "Species": "Memory",
+    "Description": "A digital virus that has manifested in the physical world as a glitching, unstable knight.",
+    "image": "memory-leak"
+  }
+]

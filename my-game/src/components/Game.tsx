@@ -1,7 +1,7 @@
-import React from "react";
 import { useGameEngine } from "../hooks/useGameEngine";
 import { myPlayer } from "playroomkit";
 import { POSITION, type DeckCard } from "../lib/const";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Game = () => {
   const {
@@ -15,7 +15,6 @@ const Game = () => {
     decks,
     field,
     selectedHandIndex,
-    selectedPosition,
     selectedAttackerIndex,
     playerSummons,
     performPlayerAction,
@@ -125,9 +124,22 @@ const Game = () => {
   };
 
   const handleDraw = () => {
+    console.log('[Draw] Attempting to draw card', {
+      isMyTurn,
+      phase,
+      deckSize: myDeck?.length,
+      myId,
+    });
     // Optional draw: allow during your turn, MAIN phase, and if deck has cards
-    if (!isMyTurn || phase !== "MAIN") return;
-    if (!myDeck || myDeck.length === 0) return;
+    if (!isMyTurn || phase !== "MAIN") {
+      console.log('[Draw] Failed: Not your turn or not MAIN phase');
+      return;
+    }
+    if (!myDeck || myDeck.length === 0) {
+      console.log('[Draw] Failed: No cards in deck');
+      return;
+    }
+    console.log('[Draw] Calling drawCard');
     drawCard(myId);
   };
 
@@ -157,14 +169,17 @@ const Game = () => {
       return (
         <div
           key={index}
-          className={`w-24 h-36 border-2 border-dashed border-gray-400 rounded flex items-center justify-center m-1 bg-gray-100
+          className={`w-32 h-48 border-2 border-dashed border-gray-400 rounded flex items-center justify-center m-1 bg-gray-100
              ${isMine && phase === "SELECT_ZONE" ? "bg-green-100 cursor-pointer hover:bg-green-200" : ""}
              ${!isMine && phase === "SELECT_TARGET" ? "cursor-not-allowed opacity-50" : ""}
           `}
           onClick={() => {
-            // Prevent clicking empty opponent zones during attack phase
+            // Don't allow clicking empty opponent zones during attack
             if (!isMine && phase === "SELECT_TARGET") return;
-            if (!isHand) handleFieldClick(isMine, index);
+            // Only allow clicking own empty zones during SELECT_ZONE phase
+            if (isMine && phase === "SELECT_ZONE") {
+              handleFieldClick(isMine, index);
+            }
           }}
         >
           <span className="text-xs text-gray-400">Zone {index + 1}</span>
@@ -177,58 +192,105 @@ const Game = () => {
     const isSelected = isHand && index === selectedHandIndex;
     const isAttacker = !isHand && isMine && index === selectedAttackerIndex;
 
-    // Type assertion for position (safe since engine adds it)
     const cardWithPosition = card as DeckCard & { position?: string };
     const isDefense =
       cardWithPosition.position === POSITION.DEFENSE ||
       cardWithPosition.position === POSITION.DEFENSE_DOWN;
     const isFaceDown = cardWithPosition.position === POSITION.DEFENSE_DOWN;
+    // For hand cards, use the fan effect with Framer Motion
+    if (isHand) {
+      const cardId = card.id || `${card.name}-${index}`;
+      const imagePath = card.image ? `/images/${card.image}.png` : '/images/back.png';
+      
+      if (!card.image) {
+        console.warn('Card missing image field:', card);
+      }
+      
+      return (
+        <motion.img
+          key={cardId}
+          layoutId={cardId}
+          src={imagePath}
+          alt={card.Name || card.name}
+          className="card-hand w-32 h-48 mx-[-20px] cursor-pointer pointer-events-auto"
+          style={{
+            position: 'relative',
+          }}
+          initial={{
+            y: Math.abs(index - (myHand.length - 1) / 2) * 10,
+            rotate: (index - (myHand.length - 1) / 2) * 8,
+          }}
+          animate={{
+            scale: isSelected ? 1.1 : 1,
+            y: isSelected ? -40 : Math.abs(index - (myHand.length - 1) / 2) * 10,
+            rotate: isSelected ? 0 : (index - (myHand.length - 1) / 2) * 8,
+            zIndex: isSelected ? 30 : 1,
+          }}
+          whileHover={{
+            scale: 1.1,
+            y: -30,
+            rotate: 0,
+            zIndex: 20,
+          }}
+          transition={{
+            type: "spring",
+            stiffness: 300,
+            damping: 30,
+          }}
+          onClick={() => handleHandClick(index)}
+          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+            console.error('Failed to load hand card image:', imagePath, card);
+            e.currentTarget.src = '/images/back.png';
+          }}
+        />
+      );
+    }
 
+    // For field cards - animated with layoutId
+    const cardId = card.id || `${card.name}-field-${index}`;
+    
+    // Show back of card for defense position monsters (both face-down and face-up defense)
+    const shouldShowBack = isDefense && !isMine;
+    
     return (
-      <div
-        key={index}
-        className={`w-24 h-36 border-2 border-black rounded-lg flex flex-col items-center justify-between p-2 m-1 bg-gradient-to-br from-white to-gray-50 shadow-md relative transition-all duration-200 hover:shadow-lg
-          ${isHand ? "cursor-pointer hover:-translate-y-2 hover:scale-105" : "cursor-default"}
-          ${!isHand && !isMine && phase === "SELECT_TARGET" ? "cursor-crosshair hover:scale-105 ring-4 ring-red-400 ring-offset-2 animate-pulse" : ""}
-          ${isSelected ? "ring-4 ring-blue-500 ring-offset-2 shadow-blue-500/50" : ""}
-          ${isAttacker ? "ring-4 ring-red-500 ring-offset-2 shadow-red-500/50 animate-pulse" : ""}
-          ${isDefense ? "bg-gray-200/60" : ""}
+      <motion.div
+        key={cardId}
+        layoutId={cardId}
+        className={`relative pointer-events-auto
+          ${!isMine && phase === "SELECT_TARGET" ? "cursor-crosshair" : ""}
+          ${isAttacker ? "ring-2 ring-red-500" : ""}
         `}
         style={isDefense ? { transform: "rotate(90deg)" } : {}}
-        onClick={() =>
-          isHand ? handleHandClick(index) : handleFieldClick(isMine, index)
-        }
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{
+          scale: isAttacker ? 1.05 : 1,
+          opacity: 1,
+        }}
+        whileHover={{
+          scale: !isMine && phase === "SELECT_TARGET" ? 1.05 : 1,
+        }}
+        transition={{
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+        }}
+        onClick={() => handleFieldClick(isMine, index)}
       >
-        {!isFaceDown || isMine ? (
-          <>
-            <div className="font-bold text-xs text-center leading-tight text-gray-800 min-h-[2.5rem] flex items-center">
-              {card.name}
-            </div>
-            <div className="text-2xl mb-1">👾</div>
-            <div className="flex w-full justify-between text-xs font-bold tracking-wide">
-              <span className="text-red-600 bg-red-100 px-1 py-0.5 rounded">
-                ATK
-                <br />
-                {card.attack}
-              </span>
-              <span className="text-blue-600 bg-blue-100 px-1 py-0.5 rounded">
-                DEF
-                <br />
-                {card.defense}
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-amber-700 to-amber-900 rounded-lg flex items-center justify-center text-white shadow-inner">
-            <span className="text-lg font-bold">?</span>
-          </div>
-        )}
-      </div>
+        <img
+          src={shouldShowBack ? `/images/back.png` : `/images/${card.image}.png`}
+          alt={shouldShowBack ? "Defense Position" : (card.Name || card.name)}
+          className="w-32 h-48 rounded shadow-lg"
+          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+            console.error('Failed to load field card image:', card.image);
+            e.currentTarget.src = '/images/back.png';
+          }}
+        />
+      </motion.div>
     );
   };
 
   return (
-    <div className="w-full h-screen flex flex-col bg-gradient-to-br from-slate-200 via-blue-50 to-indigo-100 p-4 select-none overflow-hidden">
+    <div className="w-full h-screen flex flex-col bg-gradient-to-br from-slate-200 via-blue-50 to-indigo-100 p-4 select-none relative">
       {/* HUD */}
       <div className="flex justify-between items-center mb-4 p-4 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border">
         <div className="bg-red-500/10 p-4 rounded-xl border border-red-200">
@@ -332,21 +394,32 @@ const Game = () => {
         </div>
       </div>
 
-      {/* My Hand */}
-      <div className="h-44 mt-4 p-4 bg-gradient-to-t from-slate-400/80 via-slate-300/90 to-transparent rounded-2xl backdrop-blur-sm border-t-2 border-slate-300 shadow-inner overflow-x-auto">
-        <div className="flex gap-2 justify-center pb-4">
-          {myHand.map((c, i) => renderCard(c, true, i, true))}
+      {/* My Hand - absolute positioning with pointer-events-none on container */}
+      <div className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none">
+        <div className="relative h-full flex justify-center items-end pb-4">
+          <AnimatePresence>
+            {myHand.map((c, i) => renderCard(c, true, i, true))}
+          </AnimatePresence>
         </div>
       </div>
 
       {/* Position Selection Overlay */}
-      {phase === "SELECT_POSITION" && isMyTurn && (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-50 p-8">
-          <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border-4 border-white max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-3xl font-black text-center mb-8 bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              Select Monster Position
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {phase === "SELECT_POSITION" && isMyTurn && selectedHandIndex !== null && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md">
+            <h2 className="text-xl font-bold text-center mb-4">Select Position</h2>
+            
+            {/* Show the card being summoned */}
+            <div className="flex justify-center mb-6">
+              <img
+                src={`/images/${myHand[selectedHandIndex].image}.png`}
+                alt={myHand[selectedHandIndex].Name || myHand[selectedHandIndex].name}
+                className="w-32 h-48 rounded shadow-lg"
+              />
+            </div>
+
+            {/* Position options as simple list */}
+            <div className="space-y-3">
               <button
                 onClick={() =>
                   performPlayerAction(myId, {
@@ -354,15 +427,9 @@ const Game = () => {
                     payload: { position: POSITION.ATTACK },
                   })
                 }
-                className="group relative p-8 bg-gradient-to-br from-red-100 to-red-200 hover:from-red-200 hover:to-red-300 rounded-2xl border-4 border-red-300 shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 hover:scale-105"
+                className="w-full py-3 px-4 bg-red-500 hover:bg-red-600 text-white rounded transition-colors text-left"
               >
-                <div className="text-4xl mb-4">⚔️</div>
-                <div className="font-black text-2xl text-red-700 group-hover:text-red-800 mb-2">
-                  Attack Position
-                </div>
-                <div className="text-sm text-red-600 font-medium">
-                  Face Up Attack
-                </div>
+                Attack
               </button>
 
               <button
@@ -372,15 +439,9 @@ const Game = () => {
                     payload: { position: POSITION.DEFENSE },
                   })
                 }
-                className="group relative p-8 bg-gradient-to-br from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 rounded-2xl border-4 border-blue-300 shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 hover:scale-105 rotate-90"
+                className="w-full py-3 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors text-left"
               >
-                <div className="text-4xl mb-4 -rotate-90">🛡️</div>
-                <div className="font-black text-2xl text-blue-700 group-hover:text-blue-800 mb-2 -rotate-90">
-                  Defense Position
-                </div>
-                <div className="text-sm text-blue-600 font-medium -rotate-90">
-                  Face Up Defense
-                </div>
+                Defense
               </button>
 
               <button
@@ -390,23 +451,18 @@ const Game = () => {
                     payload: { position: POSITION.DEFENSE_DOWN },
                   })
                 }
-                className="group relative p-8 bg-gradient-to-br from-amber-100 to-amber-200 hover:from-amber-200 hover:to-amber-300 rounded-2xl border-4 border-amber-300 shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 hover:scale-105 rotate-90"
+                className="w-full py-3 px-4 bg-yellow-500 hover:bg-yellow-600 text-white rounded transition-colors text-left"
               >
-                <div className="text-4xl mb-4 -rotate-90">❓</div>
-                <div className="font-black text-2xl text-amber-700 group-hover:text-amber-800 mb-2 -rotate-90">
-                  Set (Face Down)
-                </div>
-                <div className="text-sm text-amber-600 font-medium -rotate-90">
-                  Defense Face Down
-                </div>
+                Defense (Face Down)
+              </button>
+
+              <button
+                onClick={handleCancel}
+                className="w-full py-3 px-4 bg-gray-400 hover:bg-gray-500 text-white rounded transition-colors"
+              >
+                Cancel
               </button>
             </div>
-            <button
-              onClick={handleCancel}
-              className="mt-8 w-full py-3 px-8 bg-gray-400 hover:bg-gray-500 text-white font-bold rounded-2xl text-lg shadow-lg transition-all transform hover:-translate-y-1"
-            >
-              Cancel Summon
-            </button>
           </div>
         </div>
       )}

@@ -612,21 +612,36 @@ export const GameEngineProvider = ({
   const turnSummons = currentPlayerId ? playerSummons[currentPlayerId] || 0 : 0;
 
   const drawCard = (playerId: string) => {
+    // Use the same player ID logic as performPlayerAction for consistency
+    const gamePlayerIds = Object.keys(hands).sort();
+    const playerIndex = gamePlayerIds.indexOf(playerId);
+    const isTurn = playerIndex !== -1 && playerIndex + 1 === currentPlayer;
+    
+    console.log('[Engine drawCard] Called with playerId:', playerId);
+    console.log('[Engine drawCard] Current player:', currentPlayer);
+    console.log('[Engine drawCard] Game player IDs:', gamePlayerIds);
+    console.log('[Engine drawCard] Player index:', playerIndex);
+    console.log('[Engine drawCard] Is turn:', isTurn);
+    console.log('[Engine drawCard] Player draws:', playerDraws);
+    
     // Only current player may draw
-    const currentPid = sortedPlayers[currentPlayer - 1]?.id;
-    if (!currentPid || playerId !== currentPid) {
-      console.log("Cannot draw on opponent's turn.");
+    if (!isTurn) {
+      console.log("[Engine drawCard] Cannot draw on opponent's turn.");
       return;
     }
     const playerDeck = decks[playerId];
+    console.log('[Engine drawCard] Player deck:', playerDeck?.length, 'cards');
+    
     if (!playerDeck || playerDeck.length === 0) {
-      console.log(`Player ${playerId} Deck Out! Win Condition: Opponent Wins`);
+      console.log(`[Engine drawCard] Player ${playerId} Deck Out! Win Condition: Opponent Wins`);
       return;
     }
     // Enforce maximum 1 draw per turn
     const drawsSoFar = playerDraws[playerId] || 0;
+    console.log('[Engine drawCard] Draws so far:', drawsSoFar);
+    
     if (drawsSoFar >= 1) {
-      console.log("Already drew a card this turn.");
+      console.log("[Engine drawCard] Already drew a card this turn.");
       return;
     }
     // Draw cost: Player loses 500 LP upon drawing (apply by playerId)
@@ -644,7 +659,7 @@ export const GameEngineProvider = ({
       [playerId]: newHand,
     });
     setPlayerDraws({ ...playerDraws, [playerId]: drawsSoFar + 1 });
-    console.log(`Player ${playerId} drew a card. Hand size: ${newHand.length}`);
+    console.log(`[Engine drawCard] Player ${playerId} drew a card. Hand size: ${newHand.length}`);
   };
 
   const gameState: GameState = {
@@ -725,7 +740,13 @@ export const GameEngineProvider = ({
       setPhase("MAIN");
       setRound(1);
       setTimer(0, true);
-      setPlayerDraws({});
+      
+      // Initialize playerDraws for all players
+      const initialDraws: Record<string, number> = {};
+      sortedPlayers.forEach((player) => {
+        initialDraws[player.id] = 0;
+      });
+      setPlayerDraws(initialDraws);
 
       const decksAfterDraw: Record<string, DeckCard[]> = { ...shuffledDecks };
       sortedPlayers.forEach((player) => {

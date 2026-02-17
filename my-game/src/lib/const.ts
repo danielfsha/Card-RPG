@@ -77,31 +77,35 @@ export const TIME_PHASE_PLAYER_ACTION = 0;
 export type WinReason = keyof typeof WIN_REASON;
 
 export type DeckCard = {
-  id: string;
+  id?: string;
   name: string;
   attack: number;
   defense: number;
+  // Additional fields from cards.json
+  Name?: string;
+  Level?: number;
+  ATK?: number;
+  DEF?: number;
+  Species?: string;
+  Description?: string;
+  image?: string;
 };
 
-export const DECK: DeckCard[] = [
-  { id: "card1", name: "Warrior", attack: 2000, defense: 1500 },
-  { id: "card2", name: "Mage", attack: 1500, defense: 1000 },
-  { id: "card3", name: "Archer", attack: 1800, defense: 1200 },
-  { id: "card4", name: "Giant", attack: 2500, defense: 2000 },
-  { id: "card5", name: "Assassin", attack: 1700, defense: 800 },
-  { id: "card6", name: "Paladin", attack: 1600, defense: 1800 },
-  { id: "card7", name: "Necromancer", attack: 1900, defense: 1100 },
-  { id: "card8", name: "Dragon", attack: 3000, defense: 2500 },
-  { id: "card9", name: "Knight", attack: 2200, defense: 1600 },
-  { id: "card10", name: "Rogue", attack: 1400, defense: 900 },
-  { id: "card11", name: "Vampire", attack: 2100, defense: 1300 },
-  { id: "card12", name: "Elemental", attack: 2300, defense: 1700 },
-  { id: "card13", name: "Berserker", attack: 2400, defense: 1400 },
-  { id: "card14", name: "Druid", attack: 1600, defense: 1900 },
-  { id: "card15", name: "Shapeshifter", attack: 2000, defense: 2000 },
-  { id: "card16", name: "Summoner", attack: 1800, defense: 1600 },
-  { id: "card17", name: "Monk", attack: 1700, defense: 1500 },
-  { id: "card18", name: "Samurai", attack: 2200, defense: 1800 },
-  { id: "card19", name: "Ninja", attack: 1900, defense: 1200 },
-  { id: "card20", name: "Priest", attack: 1500, defense: 2000 },
-];
+// Import cards from cards.json
+import cardsData from '../../public/cards.json';
+
+// Transform cards.json to DeckCard format
+export const DECK: DeckCard[] = cardsData.map((card: any, index: number) => ({
+  id: `card${index + 1}`,
+  name: card.Name,
+  attack: card.ATK,
+  defense: card.DEF,
+  // Keep original fields for compatibility
+  Name: card.Name,
+  Level: card.Level,
+  ATK: card.ATK,
+  DEF: card.DEF,
+  Species: card.Species,
+  Description: card.Description,
+  image: card.image,
+}));
