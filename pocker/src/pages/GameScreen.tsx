@@ -12,7 +12,7 @@ interface GameScreenProps {
 
 export function GameScreen({ onBack }: GameScreenProps) {
   const { sessionId, players } = useGameEngine();
-  const { publicKey } = useWallet();
+  const { publicKey, getContractSigner } = useWallet();
   const [gameState, setGameState] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
@@ -106,7 +106,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
       // Submit to contract
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
-      const signer = useWallet().getContractSigner();
+      const signer = getContractSigner();
       
       const pockerService = new PockerService(POCKER_CONTRACT);
       await pockerService.submitCommitment(
@@ -176,7 +176,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
       // Submit to contract
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
-      const signer = useWallet().getContractSigner();
+      const signer = getContractSigner();
       
       const pockerService = new PockerService(POCKER_CONTRACT);
       await pockerService.revealWinner(
