@@ -1,5 +1,6 @@
 
 import React, { useRef, useEffect, useState } from 'react';
+import GlossyButton from './GlossyButton';
 
 interface GlossySliderProps {
   value: number;
@@ -76,14 +77,12 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
     <div className={`flex items-center space-x-4 w-full select-none ${className}`}>
       {/* Back Button */}
       {showBackButton && (
-        <button 
+        <GlossyButton 
           onClick={onBackClick}
-          className="w-12 h-12 rounded-lg flex items-center justify-center border-2 border-black/40 shadow-lg active:scale-95 transition-transform"
-          style={{ background: 'linear-gradient(to bottom, #444, #222)' }}
           aria-label="Back"
         >
           <div className="w-0 h-0 border-t-8 border-t-transparent border-r-12 border-r-white border-b-8 border-b-transparent" />
-        </button>
+        </GlossyButton>
       )}
 
       {/* Main Track Area */}
@@ -129,13 +128,11 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
 
       {/* OK Button */}
       {showOkButton && (
-        <button 
+        <GlossyButton 
           onClick={onOkClick}
-          className="px-6 h-12 rounded-lg flex items-center justify-center border-2 border-black/40 shadow-lg active:scale-95 transition-transform"
-          style={{ background: 'linear-gradient(to bottom, #444, #222)' }}
         >
           <span className="text-white text-xl drop-shadow-[0_1px_1px_rgba(0,0,0,1)] font-bold">OK</span>
-        </button>
+        </GlossyButton>
       )}
     </div>
   );

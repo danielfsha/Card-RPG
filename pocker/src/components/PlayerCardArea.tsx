@@ -38,22 +38,25 @@ export function PlayerCardArea({ label, cards, showCards, position }: PlayerCard
     const middleIndex = (totalCards - 1) / 2;
     const offset = index - middleIndex;
     
-    // Rotation: Spread cards by ~12 degrees. 
-    const rotation = offset * 12; 
+    // Rotation: Reduced rotation for less tilt
+    const rotation = offset * 8; 
+    
+    // Horizontal spacing: Add translateX to physically space cards apart
+    const translateX = offset * 45; // 45px spacing between cards
     
     // Arch effect: Move cards slightly "down" the further they are from center
     // to create that rounded fan top seen in your second image.
-    const translateY = Math.abs(offset) * 12;
+    const translateY = Math.abs(offset) * 3;
 
     return (
       <div
         key={`${isBack ? 'back' : 'front'}-${index}`}
-        className="absolute w-28 h-40 sm:w-32 sm:h-44"
+        className="absolute w-28 h-40 sm:w-32 sm:h-44 pointer-events-none"
         style={{
           left: '50%',
           // Crucial: The pivot point is the bottom-center of the card
           transformOrigin: 'bottom center',
-          transform: `translateX(-50%) translateY(${translateY}px) rotate(${rotation}deg)`,
+          transform: `translateX(calc(-50% + ${translateX}px)) translateY(${translateY}px) rotate(${rotation}deg)`,
           filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.4))',
           zIndex: index,
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',

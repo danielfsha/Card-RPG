@@ -25,7 +25,7 @@ export function ModeSelectScreen({
   if (isLoading) {
     return (
       <div className="w-full min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 text-center">
+        <div className="p-12 text-center">
           <h3 className="text-white text-3xl mb-6 font-bold">LOADING</h3>
           <p className="text-white/70">Initializing game environment...</p>
         </div>
