@@ -3,11 +3,20 @@ import { useGameEngine } from "../hooks/useGameEngine";
 import { useWallet } from "../hooks/useWallet";
 import Header from "../components/Header";
 import GlossyButton from "../components/GlossyButton";
+import GlossySlider from "../components/GlossySlider";
 import toast from "react-hot-toast";
 import { ZKPokerService } from "../services/zkService";
+import cardsData from "../../public/cards.json";
 
 interface GameScreenProps {
   onBack: () => void;
+}
+
+interface CardData {
+  rank: string;
+  suit: string;
+  display: string;
+  color: string;
 }
 
 export function GameScreen({ onBack }: GameScreenProps) {
@@ -22,6 +31,12 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const [mySalt, setMySalt] = useState<bigint>();
   const [myCommitment, setMyCommitment] = useState<string>();
   const [generatingProof, setGeneratingProof] = useState(false);
+  
+  // Betting state
+  const [betAmount, setBetAmount] = useState(1);
+  const [showRaiseSlider, setShowRaiseSlider] = useState(false);
+  const minBet = 1;
+  const maxBet = 100;
 
   // Load game state
   useEffect(() => {
@@ -32,7 +47,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
     }
 
     let pollCount = 0;
-    const MAX_POLLS = 30; // 30 polls * 3 seconds = 90 seconds max wait
+    const MAX_POLLS = 30;
     let pollInterval: NodeJS.Timeout;
     
     const loadGame = async () => {
@@ -71,10 +86,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
       }
     };
 
-    // Initial load
     loadGame();
-    
-    // Poll for updates every 3 seconds
     pollInterval = setInterval(loadGame, 3000);
     
     return () => {
@@ -82,20 +94,23 @@ export function GameScreen({ onBack }: GameScreenProps) {
     };
   }, [sessionId]);
 
+  // Get card display info
+  const getCardInfo = (cardIndex: number): CardData | null => {
+    const card = cardsData.cards[cardIndex.toString() as keyof typeof cardsData.cards];
+    return card || null;
+  };
+
   // Commit Phase: Generate hand and submit commitment
   const handleCommit = async () => {
     try {
       toast.loading("Generating hand and commitment...");
       
-      // Generate random hand
       const cards = zkService.generateRandomHand();
       const salt = zkService.generateSalt();
       
-      // Compute commitment
       await zkService.initialize();
       const commitment = await zkService.commitHand(cards, salt);
       
-      // Store locally
       setMyCards(cards);
       setMySalt(salt);
       setMyCommitment(commitment);
@@ -103,7 +118,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
       toast.dismiss();
       toast.success("Hand generated! Submitting commitment...");
       
-      // Submit to contract
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
       const signer = getContractSigner();
@@ -118,8 +132,10 @@ export function GameScreen({ onBack }: GameScreenProps) {
       
       toast.success("Commitment submitted!");
       
-      // Show cards to player
-      const cardNames = cards.map(c => zkService.getCardName(c)).join(", ");
+      const cardNames = cards.map(c => {
+        const info = getCardInfo(c);
+        return info ? info.display : `Card ${c}`;
+      }).join(" ");
       toast.success(`Your hand: ${cardNames}`, { duration: 5000 });
       
     } catch (err: any) {
@@ -135,13 +151,10 @@ export function GameScreen({ onBack }: GameScreenProps) {
       setGeneratingProof(true);
       toast.loading("Generating ZK proof... This may take a few seconds.");
       
-      // Get opponent's data (in real game, this would be exchanged off-chain)
-      // For now, we'll generate a dummy opponent hand for testing
       const opponentCards = zkService.generateRandomHand();
       const opponentSalt = zkService.generateSalt();
       const opponentCommitment = await zkService.commitHand(opponentCards, opponentSalt);
       
-      // Determine player order
       const isPlayer1 = gameState.player1 === publicKey;
       const player1Cards = isPlayer1 ? myCards : opponentCards;
       const player1Salt = isPlayer1 ? mySalt! : opponentSalt;
@@ -150,7 +163,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
       const player2Salt = isPlayer1 ? opponentSalt : mySalt!;
       const player2Commitment = isPlayer1 ? opponentCommitment : myCommitment!;
       
-      // Generate proof
       const proofData = await zkService.generateProof(
         player1Cards,
         player1Salt,
@@ -163,17 +175,13 @@ export function GameScreen({ onBack }: GameScreenProps) {
       toast.dismiss();
       toast.success("Proof generated! Submitting to contract...");
       
-      // Serialize proof for contract
       const serializedProof = zkService.serializeProof(proofData.proof);
-      
-      // Serialize public signals as Buffers
       const publicSignalsBuffers = proofData.publicSignals.map((signal: string) => {
         const bn = BigInt(signal);
         const hex = bn.toString(16).padStart(64, '0');
         return Buffer.from(hex, 'hex');
       });
       
-      // Submit to contract
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
       const signer = getContractSigner();
@@ -189,7 +197,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
       
       toast.success("Winner revealed!");
       
-      // Show results
       const p1Ranking = zkService.getHandRankingName(proofData.player1Ranking);
       const p2Ranking = zkService.getHandRankingName(proofData.player2Ranking);
       const winnerText = proofData.winner === 1 ? "Player 1" : proofData.winner === 2 ? "Player 2" : "Tie";
@@ -206,6 +213,23 @@ export function GameScreen({ onBack }: GameScreenProps) {
     } finally {
       setGeneratingProof(false);
     }
+  };
+
+  const handleFold = () => {
+    toast("Fold functionality coming soon!");
+  };
+
+  const handleCall = () => {
+    toast("Call functionality coming soon!");
+  };
+
+  const handleRaise = () => {
+    setShowRaiseSlider(true);
+  };
+
+  const handleRaiseConfirm = () => {
+    toast.success(`Raised ${betAmount} XLM!`);
+    setShowRaiseSlider(false);
   };
 
   if (loading) {
@@ -250,7 +274,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
     );
   }
 
-  // Determine game phase and player status
   const isPlayer1 = gameState.player1 === publicKey;
   const myCommitted = isPlayer1 
     ? gameState.player1_commitment !== null 
@@ -261,145 +284,228 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const bothCommitted = myCommitted && opponentCommitted;
   const hasWinner = gameState.winner !== null && gameState.winner !== undefined;
   
-  // Phase display
   const phase = gameState.phase?.tag || "Commit";
   const isCommitPhase = phase === "Commit";
   const isRevealPhase = phase === "Reveal";
   const isComplete = phase === "Complete" || hasWinner;
 
+  // Render playing card
+  const renderCard = (cardIndex: number, index: number) => {
+    const cardInfo = getCardInfo(cardIndex);
+    if (!cardInfo) return null;
+
+    return (
+      <div
+        key={index}
+        className="relative w-20 h-28 bg-white rounded-lg border-2 border-gray-300 shadow-xl flex flex-col items-center justify-center transition-transform hover:scale-105"
+        style={{
+          marginLeft: index > 0 ? '-15px' : '0',
+        }}
+      >
+        <div className={`text-4xl font-bold ${cardInfo.color === 'red' ? 'text-red-600' : 'text-black'}`}>
+          {cardInfo.rank}
+        </div>
+        <div className={`text-3xl ${cardInfo.color === 'red' ? 'text-red-600' : 'text-black'}`}>
+          {cardInfo.display.slice(-1)}
+        </div>
+      </div>
+    );
+  };
+
+  // Render card back
+  const renderCardBack = (index: number) => {
+    return (
+      <div
+        key={index}
+        className="relative w-20 h-28 rounded-lg border-2 border-blue-900 shadow-xl overflow-hidden"
+        style={{
+          marginLeft: index > 0 ? '-15px' : '0',
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #1e3a8a 100%)',
+        }}
+      >
+        {/* Card back pattern */}
+        <div className="absolute inset-0 opacity-30"
+          style={{
+            backgroundImage: `
+              repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px),
+              repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)
+            `,
+          }}
+        />
+        {/* Center design */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-16 border-4 border-white/40 rounded-lg rotate-45" />
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-8 h-12 border-4 border-white/40 rounded-lg -rotate-45" />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
-      <Header showBackButton onBack={onBack} />
-      <div className="w-full min-h-screen flex flex-col items-center justify-center p-4 pt-24">
-        <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 w-full max-w-4xl">
-          <h2 className="text-white text-4xl mb-8 text-center font-bold">
-            ZK POKER
-          </h2>
+      <Header showBackButton={false} />
+      
+      {/* Poker Table */}
+      <div className="w-full min-h-screen flex items-center justify-center p-4 pt-20 pb-32"
+        style={{
+          background: 'linear-gradient(180deg, #1a472a 0%, #0d2818 100%)',
+        }}
+      >
+        <div className="relative w-full max-w-6xl aspect-[16/10]">
+          {/* Poker Table Ellipse */}
+          <div 
+            className="absolute inset-0 rounded-[50%] border-8 shadow-2xl"
+            style={{
+              background: 'radial-gradient(ellipse at center, #2d5a3d 0%, #1a3d2a 100%)',
+              borderColor: '#8b4513',
+              boxShadow: 'inset 0 0 60px rgba(0,0,0,0.5), 0 20px 40px rgba(0,0,0,0.6)',
+            }}
+          >
+            {/* Table felt texture */}
+            <div className="absolute inset-8 rounded-[50%] opacity-20"
+              style={{
+                background: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
+              }}
+            />
+          </div>
 
-          {/* Game Info */}
-          <div className="mb-8 grid grid-cols-3 gap-4">
-            <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-              <div className="text-white/70 text-sm mb-2">Session ID</div>
-              <div className="text-white text-xl font-mono">{sessionId}</div>
-            </div>
-            <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-              <div className="text-white/70 text-sm mb-2">Phase</div>
-              <div className="text-white text-xl">{phase}</div>
-            </div>
-            <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-              <div className="text-white/70 text-sm mb-2">Players</div>
-              <div className="text-white text-xl">{players.length}/2</div>
+          {/* Center Pot */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="text-white/70 text-sm mb-2">POT</div>
+            <div className="text-white text-4xl font-bold drop-shadow-lg">
+              ${gameState.player1_points ? Number(gameState.player1_points) / 10000000 : 0}
             </div>
           </div>
 
-          {/* Game Complete */}
-          {isComplete && (
-            <div className="mb-8 bg-green-500/20 border-2 border-green-500/50 rounded-xl p-6">
-              <div className="text-center">
-                <div className="text-green-200 text-2xl font-bold mb-2">
-                  Game Complete!
-                </div>
-                <div className="text-green-200 text-lg">
-                  Winner: {gameState.winner === publicKey ? "You!" : "Opponent"}
-                </div>
-                {gameState.player1_ranking !== null && (
-                  <div className="text-green-200 text-sm mt-4">
-                    <div>Player 1: {zkService.getHandRankingName(gameState.player1_ranking)}</div>
-                    <div>Player 2: {zkService.getHandRankingName(gameState.player2_ranking)}</div>
-                  </div>
-                )}
+          {/* Opponent's Area (Top) */}
+          <div className="absolute top-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
+            <div className="text-white/70 text-sm mb-2">Opponent</div>
+            {opponentCommitted ? (
+              <div className="flex">
+                {[0, 1, 2, 3, 4].map((i) => renderCardBack(i))}
               </div>
+            ) : (
+              <div className="text-white/50 text-sm">Waiting to commit...</div>
+            )}
+          </div>
+
+          {/* Player's Area (Bottom) */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
+            <div className="text-white/70 text-sm mb-2">You</div>
+            {myCards.length > 0 ? (
+              <div className="flex">
+                {myCards.map((card, index) => renderCard(card, index))}
+              </div>
+            ) : (
+              <div className="text-white/50 text-sm">No cards yet - Click "Generate & Commit"</div>
+            )}
+          </div>
+
+          {/* Phase Indicator */}
+          <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20">
+            <div className="text-white/70 text-xs">Phase</div>
+            <div className="text-white text-lg font-bold">{phase}</div>
+          </div>
+
+          {/* Session ID */}
+          <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20">
+            <div className="text-white/70 text-xs">Session</div>
+            <div className="text-white text-sm font-mono">{sessionId}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fixed Bottom Controls Container */}
+      <div 
+        className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent backdrop-blur-sm border-t border-white/10 p-6"
+        style={{ pointerEvents: 'none' }}
+      >
+        <div className="max-w-4xl mx-auto" style={{ pointerEvents: 'auto' }}>
+          {/* Raise Slider */}
+          {showRaiseSlider && (
+            <div className="mb-4">
+              <GlossySlider
+                value={betAmount}
+                min={minBet}
+                max={maxBet}
+                onChange={setBetAmount}
+                onBackClick={() => setShowRaiseSlider(false)}
+                onOkClick={handleRaiseConfirm}
+                formatValue={(val) => `$${val}`}
+                showBackButton={true}
+                showOkButton={true}
+              />
             </div>
           )}
 
-          {/* Commit Phase */}
-          {isCommitPhase && !isComplete && (
+          {/* Action Buttons */}
+          {!showRaiseSlider && (
             <>
-              <div className="mb-8 bg-blue-500/20 border-2 border-blue-500/50 rounded-xl p-6">
-                <div className="text-center">
-                  <div className="text-blue-200 text-xl font-bold mb-4">
-                    Commitment Phase
+              {/* Commit Phase */}
+              {isCommitPhase && !isComplete && !myCommitted && (
+                <div className="flex flex-col gap-2">
+                  <div className="text-center text-white/70 text-sm mb-2">
+                    Click below to generate your hand and commit to the blockchain
                   </div>
-                  <div className="text-blue-200 text-sm mb-4">
-                    {!myCommitted && "Generate your hand and submit commitment"}
-                    {myCommitted && !bothCommitted && "Waiting for opponent to commit..."}
-                    {bothCommitted && "Both players committed! Moving to reveal phase..."}
-                  </div>
+                  <GlossyButton 
+                    onClick={handleCommit} 
+                    className="w-full py-4 text-xl bg-green-600 hover:bg-green-700"
+                  >
+                    🎴 Generate Hand & Commit
+                  </GlossyButton>
                 </div>
-              </div>
+              )}
 
-              {/* Commitment Status */}
-              <div className="mb-8 grid grid-cols-2 gap-4">
-                <div className="bg-white/5 p-6 rounded-xl border border-white/10">
-                  <div className="text-white/70 text-sm mb-2">Your Commitment</div>
-                  <div className="text-white text-3xl font-bold">
-                    {myCommitted ? "✓" : "—"}
-                  </div>
-                  {myCards.length > 0 && (
-                    <div className="text-white/70 text-xs mt-2">
-                      {myCards.map(c => zkService.getCardName(c)).join(", ")}
+              {/* Waiting for opponent */}
+              {isCommitPhase && myCommitted && !bothCommitted && (
+                <div className="text-center text-white/70 py-4">
+                  Waiting for opponent to commit...
+                </div>
+              )}
+
+              {/* Reveal Phase */}
+              {isRevealPhase && !isComplete && (
+                <div className="flex gap-4">
+                  <GlossyButton 
+                    onClick={handleFold}
+                    className="flex-1 py-4 text-xl bg-gray-600 hover:bg-gray-700"
+                  >
+                    Fold
+                  </GlossyButton>
+                  <GlossyButton 
+                    onClick={handleCall}
+                    className="flex-1 py-4 text-xl bg-blue-600 hover:bg-blue-700"
+                  >
+                    Call
+                  </GlossyButton>
+                  <GlossyButton 
+                    onClick={handleRaise}
+                    className="flex-1 py-4 text-xl bg-red-600 hover:bg-red-700"
+                  >
+                    Raise
+                  </GlossyButton>
+                </div>
+              )}
+
+              {/* Complete - Show Winner */}
+              {isComplete && (
+                <div className="flex flex-col gap-4">
+                  <div className="text-center bg-green-500/20 border-2 border-green-500/50 rounded-xl p-4">
+                    <div className="text-green-200 text-2xl font-bold">
+                      {gameState.winner === publicKey ? "You Won!" : "Opponent Won"}
                     </div>
-                  )}
-                </div>
-                <div className="bg-white/5 p-6 rounded-xl border border-white/10">
-                  <div className="text-white/70 text-sm mb-2">Opponent's Commitment</div>
-                  <div className="text-white text-3xl font-bold">
-                    {opponentCommitted ? "✓" : "—"}
                   </div>
-                </div>
-              </div>
-
-              {/* Commit Button */}
-              {!myCommitted && (
-                <GlossyButton onClick={handleCommit} className="w-full py-4 text-xl">
-                  Generate Hand & Commit
-                </GlossyButton>
-              )}
-            </>
-          )}
-
-          {/* Reveal Phase */}
-          {isRevealPhase && !isComplete && (
-            <>
-              <div className="mb-8 bg-purple-500/20 border-2 border-purple-500/50 rounded-xl p-6">
-                <div className="text-center">
-                  <div className="text-purple-200 text-xl font-bold mb-4">
-                    Reveal Phase
-                  </div>
-                  <div className="text-purple-200 text-sm mb-4">
-                    Generate ZK proof to reveal the winner
-                  </div>
-                </div>
-              </div>
-
-              {/* Your Hand */}
-              {myCards.length > 0 && (
-                <div className="mb-8 bg-white/5 p-6 rounded-xl border border-white/10">
-                  <div className="text-white/70 text-sm mb-2">Your Hand</div>
-                  <div className="text-white text-2xl">
-                    {myCards.map(c => zkService.getCardName(c)).join("  ")}
-                  </div>
+                  <GlossyButton 
+                    onClick={onBack}
+                    className="w-full py-4 text-xl"
+                  >
+                    Back to Lobby
+                  </GlossyButton>
                 </div>
               )}
-
-              {/* Reveal Button */}
-              <GlossyButton 
-                onClick={handleReveal} 
-                className="w-full py-4 text-xl"
-                disabled={generatingProof}
-              >
-                {generatingProof ? "Generating Proof..." : "Reveal Winner (Generate ZK Proof)"}
-              </GlossyButton>
             </>
-          )}
-
-          {/* Back Button */}
-          {isComplete && (
-            <div className="mt-8">
-              <GlossyButton onClick={onBack} className="w-full py-3">
-                Back to Lobby
-              </GlossyButton>
-            </div>
           )}
         </div>
       </div>
