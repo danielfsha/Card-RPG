@@ -17,6 +17,7 @@ interface CardData {
   suit: string;
   display: string;
   color: string;
+  image: string;
 }
 
 export function GameScreen({ onBack }: GameScreenProps) {
@@ -297,17 +298,17 @@ export function GameScreen({ onBack }: GameScreenProps) {
     return (
       <div
         key={index}
-        className="relative w-20 h-28 bg-white rounded-lg border-2 border-gray-300 shadow-xl flex flex-col items-center justify-center transition-transform hover:scale-105"
+        className="relative w-24 h-32 transition-transform hover:scale-105 hover:-translate-y-2"
         style={{
-          marginLeft: index > 0 ? '-15px' : '0',
+          marginLeft: index > 0 ? '-20px' : '0',
+          filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))',
         }}
       >
-        <div className={`text-4xl font-bold ${cardInfo.color === 'red' ? 'text-red-600' : 'text-black'}`}>
-          {cardInfo.rank}
-        </div>
-        <div className={`text-3xl ${cardInfo.color === 'red' ? 'text-red-600' : 'text-black'}`}>
-          {cardInfo.display.slice(-1)}
-        </div>
+        <img 
+          src={cardInfo.image} 
+          alt={cardInfo.display}
+          className="w-full h-full object-contain"
+        />
       </div>
     );
   };
@@ -317,28 +318,17 @@ export function GameScreen({ onBack }: GameScreenProps) {
     return (
       <div
         key={index}
-        className="relative w-20 h-28 rounded-lg border-2 border-blue-900 shadow-xl overflow-hidden"
+        className="relative w-24 h-32"
         style={{
-          marginLeft: index > 0 ? '-15px' : '0',
-          background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #1e3a8a 100%)',
+          marginLeft: index > 0 ? '-20px' : '0',
+          filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))',
         }}
       >
-        {/* Card back pattern */}
-        <div className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `
-              repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px),
-              repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)
-            `,
-          }}
+        <img 
+          src={cardsData.cardBack} 
+          alt="Card back"
+          className="w-full h-full object-contain"
         />
-        {/* Center design */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-12 h-16 border-4 border-white/40 rounded-lg rotate-45" />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-8 h-12 border-4 border-white/40 rounded-lg -rotate-45" />
-        </div>
       </div>
     );
   };
