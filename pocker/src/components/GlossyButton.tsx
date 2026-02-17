@@ -29,14 +29,6 @@ const GlossyButton = React.forwardRef<HTMLButtonElement, GlossyButtonProps>(
         <div className="absolute top-[2px] left-[4px] right-[4px] h-[40%] bg-linear-to-b from-white/10 to-transparent rounded-t-lg pointer-events-none" />
 
         <div className="flex items-center space-x-3 z-10">
-          {icon === 'play' && (
-            <div className="w-0 h-0 border-t-10 border-t-transparent border-l-16 border-l-white border-b-10 border-b-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]" />
-          )}
-          {icon === 'plus' && (
-            <div className="relative w-6 h-6 flex items-center justify-center bg-[#222] border border-white/20 rounded shadow-inner">
-               <span className="text-white font-bold text-xl leading-none">+</span>
-            </div>
-          )}
           <span className="text-white text-2xl tracking-wider drop-shadow-[0_2px_2px_rgba(0,0,0,1)] font-bold">
             {children}
           </span>

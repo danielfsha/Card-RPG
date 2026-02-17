@@ -9,9 +9,11 @@ import { SettingsScreen } from "./pages/SettingsScreen";
 import { LobbyScreen } from "./pages/LobbyScreen";
 import { GameScreen } from "./pages/GameScreen";
 
+import { ConfigDebug } from "./components/ConfigDebug";
+
 function App() {
   const { publicKey, isConnected, isConnecting, connect, error } = useWallet();
-  
+
   const [gameMode, setGameMode] = useState<"single" | "multi" | null>(null);
   const [playroomLoading, setPlayroomLoading] = useState(false);
   const [initRoomCode, setInitRoomCode] = useState<string | null>(null);
@@ -99,37 +101,42 @@ function App() {
   return (
     <GameEngineProvider>
       <div className="min-h-screen bg-[url(/background.png)] ">
+        {/* <ConfigDebug /> */}
+
         <Toaster
           position="top-center"
           toastOptions={{
             duration: 3000,
             style: {
-              background: '#1f2937',
-              color: '#fff',
-              fontFamily: 'var(--font-slab)',
+              background: "#1f2937",
+              color: "#fff",
+              fontFamily: "var(--font-slab)",
               fontWeight: 700,
             },
           }}
         />
         {!isConnected ? (
-        <SplashScreen onConnect={handleConnect} error={error} isConnecting={isConnecting} />
-      ) : isSettingsOpen ? (
-        <SettingsScreen onBack={() => setIsSettingsOpen(false)} />
-      ) : !gameMode ? (
-        <ModeSelectScreen
-          onSelectMode={handleStartGame}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          isLoading={playroomLoading || isAutoJoining}
-        />
-      ) : inLobby ? (
-        <LobbyScreen onStartGame={handleStartGameFromLobby} />
-      ) : gameStarted ? (
-        <GameScreen onBack={handleBackToLobby} />
-      ) : null}
+          <SplashScreen
+            onConnect={handleConnect}
+            error={error}
+            isConnecting={isConnecting}
+          />
+        ) : isSettingsOpen ? (
+          <SettingsScreen onBack={() => setIsSettingsOpen(false)} />
+        ) : !gameMode ? (
+          <ModeSelectScreen
+            onSelectMode={handleStartGame}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            isLoading={playroomLoading || isAutoJoining}
+          />
+        ) : inLobby ? (
+          <LobbyScreen onStartGame={handleStartGameFromLobby} />
+        ) : gameStarted ? (
+          <GameScreen onBack={handleBackToLobby} />
+        ) : null}
       </div>
     </GameEngineProvider>
   );
 }
 
 export default App;
-
