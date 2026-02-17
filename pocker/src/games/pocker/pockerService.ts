@@ -297,16 +297,20 @@ export class PockerService {
     });
 
     let tx: any | undefined;
-    let retries = 5;
+    let retries = 8; // Increased retries
     let lastError;
 
     while (retries > 0) {
       try {
         console.log(`[importAndSignAuthEntry] Building transaction (attempts left: ${retries})...`);
 
-        if (retries < 5) {
-          const jitter = Math.floor(Math.random() * 2000) + 500;
-          await new Promise((resolve) => setTimeout(resolve, jitter));
+        // Add exponential backoff with jitter
+        if (retries < 8) {
+          const baseDelay = 1000 * (8 - retries); // Exponential: 1s, 2s, 3s, etc.
+          const jitter = Math.floor(Math.random() * 2000); // Random 0-2s
+          const delay = baseDelay + jitter;
+          console.log(`[importAndSignAuthEntry] Waiting ${delay}ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
         tx = await buildClient.start_game(
@@ -320,6 +324,7 @@ export class PockerService {
           DEFAULT_METHOD_OPTIONS,
         );
 
+        console.log("[importAndSignAuthEntry] ✅ Transaction built successfully");
         break;
       } catch (err: any) {
         lastError = err;
@@ -331,9 +336,18 @@ export class PockerService {
             err.message.includes("Auth, ExistingValue") ||
             err.message.includes("HostError"))
         ) {
-          console.log("[importAndSignAuthEntry] Detected nonce error, retrying...");
+          console.log("[importAndSignAuthEntry] Detected nonce collision, will retry...");
           retries--;
+          
+          if (retries === 0) {
+            console.error("[importAndSignAuthEntry] All retries exhausted");
+            throw new Error(
+              "Failed to build transaction after multiple attempts. " +
+              "This can happen when the network is busy. Please try again in a few seconds."
+            );
+          }
         } else {
+          // Non-nonce error, throw immediately
           throw err;
         }
       }
