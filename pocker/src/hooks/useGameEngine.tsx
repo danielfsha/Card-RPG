@@ -15,7 +15,7 @@ interface GameEngineContextType {
   p1AuthEntryXDR: string;
   setP1AuthEntryXDR: (xdr: string) => void;
   setMyAddress: (address: string) => void;
-  startGame: () => void;
+  startGame: () => number;
   resetGame: () => void;
 }
 
@@ -56,9 +56,12 @@ export const GameEngineProvider = ({ children }: { children: ReactNode }) => {
   const startGame = () => {
     if (isHost()) {
       const newSessionId = createRandomSessionId();
+      console.log("[GameEngine] Generated new session ID:", newSessionId);
       setSessionId(newSessionId, true);
       setP1AuthEntryXDR("");
+      return newSessionId;
     }
+    return 0;
   };
 
   const resetGame = () => {

@@ -217,7 +217,15 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     setIsStarting(true);
     try {
       // Initialize game session (generates session ID)
-      initGameSession();
+      const newSessionId = initGameSession();
+      
+      if (!newSessionId || newSessionId === 0) {
+        toast.error("Failed to generate session ID");
+        setIsStarting(false);
+        return;
+      }
+
+      console.log("[Host] Using session ID:", newSessionId);
 
       // Import the service dynamically to avoid circular deps
       const { PockerService } = await import("../games/pocker/pockerService");
@@ -237,7 +245,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
         return;
       }
 
-      console.log("[Host] Preparing game with:", { sessionId, player1, player2 });
+      console.log("[Host] Preparing game with:", { sessionId: newSessionId, player1, player2 });
 
       // Ensure Player 1 is funded on testnet
       if (NETWORK === 'testnet') {
@@ -279,7 +287,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
 
       // Host (Player 1) creates and signs auth entry
       const authEntryXDR = await pockerService.prepareStartGame(
-        sessionId,
+        newSessionId,
         player1,
         player2, // Player 2 will be the transaction source
         points,
@@ -297,7 +305,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       // Poll for game creation (Player 2 will finalize)
       const pollInterval = setInterval(async () => {
         try {
-          const game = await pockerService.getGame(sessionId);
+          const game = await pockerService.getGame(newSessionId);
           if (game) {
             console.log("[Host] Game created by Player 2!");
             clearInterval(pollInterval);
