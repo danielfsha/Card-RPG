@@ -10,14 +10,13 @@ template HandRanking() {
     
     signal ranks[5];
     signal suits[5];
+    signal rankCheck[5];
     
     for (var i = 0; i < 5; i++) {
         ranks[i] <-- cards[i] % 13;
         suits[i] <-- cards[i] \ 13;
-        
-        signal rankCheck;
-        rankCheck <== suits[i] * 13 + ranks[i];
-        rankCheck === cards[i];
+        rankCheck[i] <== suits[i] * 13 + ranks[i];
+        rankCheck[i] === cards[i];
     }
     
     component flushChecks[4];

@@ -626,12 +626,11 @@ describe('ZK Poker Integration Tests - Security', () => {
     const salt = BigInt('12345');
     const commitment = commitHand(cards, salt);
     
-    // Commitment should not contain any card information
-    expect(commitment).not.toContain('0');
-    expect(commitment).not.toContain('1');
-    expect(commitment).not.toContain('2');
-    expect(commitment).not.toContain('3');
-    expect(commitment).not.toContain('4');
+    const differentCards = [5, 6, 7, 8, 9];
+    const differentCommitment = commitHand(differentCards, salt);
+    
+    expect(commitment).not.toBe(differentCommitment);
+    expect(commitment.length).toBeGreaterThan(50);
     
     console.log('✅ Commitment does not reveal card information');
   });
