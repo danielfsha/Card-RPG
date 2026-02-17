@@ -10,6 +10,7 @@ import {
 } from "./ui/dialog";
 import GlossyButton from "./GlossyButton";
 import toast from "react-hot-toast";
+import { ClipboardCopyIcon } from "lucide-react";
 
 export function WalletModal() {
   const { publicKey, disconnect } = useWallet();
@@ -117,7 +118,7 @@ export function WalletModal() {
           </svg>
         </GlossyButton>
       </DialogTrigger>
-      <DialogContent className="bg-gradient-to-br from-gray-900 to-black border-2 border-white/20 text-white">
+      <DialogContent className="bg-gradient-to-br from-gray-900 to-green-900 border-2 border-white/20 text-white">
 
         <div className="space-y-6 mt-4">
           {/* Balance Section */}
@@ -141,8 +142,9 @@ export function WalletModal() {
               <GlossyButton
                 onClick={copyAddress}
                 className="px-4 py-3 bg-blue-600 hover:bg-blue-700"
+                title="Copy address"
               >
-                Copy
+                <ClipboardCopyIcon />
               </GlossyButton>
             </div>
           </div>

@@ -36,37 +36,50 @@ export function ModeSelectScreen({
   if (inJoinMode) {
     return (
       <div className="w-full min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 w-full max-w-md">
+        <div className="bg-gradient-to-br from-gray-900 to-green-900 border-2 border-white/20 text-white p-8 w-full max-w-2xl rounded-sm">
           <h3 className="text-white text-3xl mb-8 text-center font-bold">
             JOIN GAME
           </h3>
-          <form onSubmit={handleJoinSubmit} className="flex flex-col space-y-4">
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value)}
-              placeholder="Enter Room Code"
-              className="px-6 py-4 text-xl text-center rounded-xl border-2 border-white/20 bg-white/10 text-white placeholder-white/50 focus:outline-none focus:border-white/40 font-bold"
-              disabled={isLoading}
-            />
-            <GlossyButton
-              type="submit"
-              disabled={!joinCode.trim() || isLoading}
-              className="w-full"
-            >
-              {isLoading ? "Joining..." : "Join Now"}
-            </GlossyButton>
-            <GlossyButton
-              type="button"
-              onClick={() => {
-                setInJoinMode(false);
-                setJoinCode("");
-              }}
-              disabled={isLoading}
-              className="w-full"
-            >
-              Back
-            </GlossyButton>
+          
+          <form onSubmit={handleJoinSubmit} className="space-y-6">
+            {/* Room Code Input */}
+            <div className="space-y-3">
+              <div className="text-white/70 text-sm text-center">
+                Enter Room Code
+              </div>
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="XXXX"
+                maxLength={4}
+                className="w-full px-6 py-4 text-6xl text-center tracking-wider rounded-xl border-2 border-white/20 bg-white/10 text-white placeholder-white/30 focus:outline-none focus:border-white/40 font-bold uppercase"
+                disabled={isLoading}
+                autoFocus
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-col gap-4 pt-4">
+              <GlossyButton
+                type="submit"
+                disabled={!joinCode.trim() || isLoading}
+                className="w-full bg-green-600 hover:bg-green-700 py-4"
+              >
+                {isLoading ? "Joining..." : "Join Game"}
+              </GlossyButton>
+              <GlossyButton
+                type="button"
+                onClick={() => {
+                  setInJoinMode(false);
+                  setJoinCode("");
+                }}
+                disabled={isLoading}
+                className="w-full bg-gray-600 hover:bg-gray-700 py-4"
+              >
+                Back
+              </GlossyButton>
+            </div>
           </form>
         </div>
       </div>

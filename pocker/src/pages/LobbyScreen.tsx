@@ -4,6 +4,7 @@ import GlossyButton from "../components/GlossyButton";
 import { useWallet } from "../hooks/useWallet";
 import { useGameEngine } from "../hooks/useGameEngine";
 import toast from "react-hot-toast";
+import { ClipboardCopy, ClipboardCopyIcon } from "lucide-react";
 
 interface LobbyScreenProps {
   onStartGame: () => void;
@@ -11,7 +12,12 @@ interface LobbyScreenProps {
 
 export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
   const { publicKey, getContractSigner } = useWallet();
-  const { sessionId, startGame: initGameSession, setP1AuthEntryXDR, p1AuthEntryXDR } = useGameEngine();
+  const {
+    sessionId,
+    startGame: initGameSession,
+    setP1AuthEntryXDR,
+    p1AuthEntryXDR,
+  } = useGameEngine();
   const players = usePlayersList(true);
   const me = myPlayer();
   const [isReady, setIsReady] = useState(false);
@@ -45,47 +51,55 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     setIsStarting(true);
     try {
       console.log("[Guest] Starting import and finalize process...");
-      
+
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT, NETWORK } = await import("../utils/constants");
-      
+
       const pockerService = new PockerService(POCKER_CONTRACT);
       const signer = getContractSigner();
 
       // Parse auth entry to get game params
       console.log("[Guest] Parsing auth entry...");
       const gameParams = pockerService.parseAuthEntry(p1AuthEntryXDR);
-      
+
       console.log("[Guest] Parsed game params:", gameParams);
 
       // Ensure Player 2 (guest) is funded on testnet
-      if (NETWORK === 'testnet' && publicKey) {
+      if (NETWORK === "testnet" && publicKey) {
         try {
           console.log("[Guest] Checking if Player 2 is funded on testnet...");
-          const horizonUrl = 'https://horizon-testnet.stellar.org';
+          const horizonUrl = "https://horizon-testnet.stellar.org";
           const accountRes = await fetch(`${horizonUrl}/accounts/${publicKey}`);
-          
+
           if (accountRes.status === 404) {
-            console.log("[Guest] Player 2 not funded, requesting from Friendbot...");
+            console.log(
+              "[Guest] Player 2 not funded, requesting from Friendbot...",
+            );
             toast("Funding your account on testnet...", {
               icon: "💰",
               duration: 3000,
             });
-            
-            const fundRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+
+            const fundRes = await fetch(
+              `https://friendbot.stellar.org?addr=${publicKey}`,
+            );
             if (fundRes.ok) {
               toast.success("Account funded!");
               // Wait a moment for Horizon to index
-              await new Promise(r => setTimeout(r, 2000));
+              await new Promise((r) => setTimeout(r, 2000));
             } else {
-              throw new Error("Failed to fund account. Please fund your wallet manually.");
+              throw new Error(
+                "Failed to fund account. Please fund your wallet manually.",
+              );
             }
           } else {
             console.log("[Guest] Player 2 already funded");
           }
         } catch (err) {
           console.error("[Guest] Error checking/funding account:", err);
-          throw new Error("Account funding required. Please fund your testnet wallet.");
+          throw new Error(
+            "Account funding required. Please fund your testnet wallet.",
+          );
         }
       }
 
@@ -111,27 +125,34 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       );
 
       console.log("[Guest] Transaction submitted! Checking status...");
-      
+
       // Check transaction status
-      if (sentTx.getTransactionResponse?.status === 'FAILED') {
-        throw new Error('Transaction failed on-chain. Check console for details.');
+      if (sentTx.getTransactionResponse?.status === "FAILED") {
+        throw new Error(
+          "Transaction failed on-chain. Check console for details.",
+        );
       }
-      
-      if (sentTx.getTransactionResponse?.status === 'SUCCESS') {
+
+      if (sentTx.getTransactionResponse?.status === "SUCCESS") {
         console.log("[Guest] Transaction successful!");
         toast.success("Game created successfully!");
       } else {
-        console.log("[Guest] Transaction status:", sentTx.getTransactionResponse?.status);
+        console.log(
+          "[Guest] Transaction status:",
+          sentTx.getTransactionResponse?.status,
+        );
       }
-      
+
       // Wait longer for the transaction to be fully processed and indexed
-      await new Promise(r => setTimeout(r, 5000));
-      
+      await new Promise((r) => setTimeout(r, 5000));
+
       // Verify game was created before navigating
-      const { PockerService: VerifyService } = await import("../games/pocker/pockerService");
-      const { POCKER_CONTRACT: VerifyContract } = await import("../utils/constants");
+      const { PockerService: VerifyService } =
+        await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT: VerifyContract } =
+        await import("../utils/constants");
       const verifyService = new VerifyService(VerifyContract);
-      
+
       let gameCreated = false;
       for (let i = 0; i < 5; i++) {
         const game = await verifyService.getGame(gameParams.sessionId);
@@ -141,15 +162,16 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
           break;
         }
         console.log(`[Guest] Game not found yet, retrying (${i + 1}/5)...`);
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, 2000));
       }
-      
-      if (!gameCreated) {
-        throw new Error("Game was not created on-chain. Transaction may have failed.");
-      }
-      
-      onStartGame();
 
+      if (!gameCreated) {
+        throw new Error(
+          "Game was not created on-chain. Transaction may have failed.",
+        );
+      }
+
+      onStartGame();
     } catch (err: any) {
       console.error("[Guest] Error importing auth entry:", err);
       console.error("[Guest] Error stack:", err.stack);
@@ -165,7 +187,9 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       // For guests: check if they're ready
       // For host: they control start manually
       const guestPlayers = players.filter((p: any) => p.id !== players[0]?.id);
-      const ready = guestPlayers.every((p: any) => p.getState("ready") === true);
+      const ready = guestPlayers.every(
+        (p: any) => p.getState("ready") === true,
+      );
       setAllReady(ready);
 
       // DISABLED: Countdown navigation conflicts with transaction-based game start
@@ -218,7 +242,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     try {
       // Initialize game session (generates session ID)
       const newSessionId = initGameSession();
-      
+
       if (!newSessionId || newSessionId === 0) {
         toast.error("Failed to generate session ID");
         setIsStarting(false);
@@ -230,12 +254,14 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       // Import the service dynamically to avoid circular deps
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT, NETWORK } = await import("../utils/constants");
-      
+
       const pockerService = new PockerService(POCKER_CONTRACT);
       const signer = getContractSigner();
 
       // Get player addresses
-      const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
+      const sortedPlayers = [...players].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
       const player1 = sortedPlayers[0].getState("address") || publicKey;
       const player2 = sortedPlayers[1].getState("address");
 
@@ -245,29 +271,39 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
         return;
       }
 
-      console.log("[Host] Preparing game with:", { sessionId: newSessionId, player1, player2 });
+      console.log("[Host] Preparing game with:", {
+        sessionId: newSessionId,
+        player1,
+        player2,
+      });
 
       // Ensure Player 1 is funded on testnet
-      if (NETWORK === 'testnet') {
+      if (NETWORK === "testnet") {
         try {
           console.log("[Host] Checking if Player 1 is funded on testnet...");
-          const horizonUrl = 'https://horizon-testnet.stellar.org';
+          const horizonUrl = "https://horizon-testnet.stellar.org";
           const accountRes = await fetch(`${horizonUrl}/accounts/${player1}`);
-          
+
           if (accountRes.status === 404) {
-            console.log("[Host] Player 1 not funded, requesting from Friendbot...");
+            console.log(
+              "[Host] Player 1 not funded, requesting from Friendbot...",
+            );
             toast("Funding your account on testnet...", {
               icon: "💰",
               duration: 3000,
             });
-            
-            const fundRes = await fetch(`https://friendbot.stellar.org?addr=${player1}`);
+
+            const fundRes = await fetch(
+              `https://friendbot.stellar.org?addr=${player1}`,
+            );
             if (fundRes.ok) {
               toast.success("Account funded!");
               // Wait a moment for Horizon to index
-              await new Promise(r => setTimeout(r, 2000));
+              await new Promise((r) => setTimeout(r, 2000));
             } else {
-              console.warn("[Host] Friendbot funding failed, continuing anyway...");
+              console.warn(
+                "[Host] Friendbot funding failed, continuing anyway...",
+              );
             }
           } else {
             console.log("[Host] Player 1 already funded");
@@ -296,7 +332,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       );
 
       console.log("[Host] Auth entry created, sharing via Playroom");
-      
+
       // Share auth entry with Player 2 via Playroom
       setP1AuthEntryXDR(authEntryXDR);
 
@@ -322,7 +358,6 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
         clearInterval(pollInterval);
         setIsStarting(false);
       }, 300000);
-
     } catch (err: any) {
       console.error("[Host] Error starting game:", err);
       toast.error(err.message || "Failed to start game");
@@ -338,13 +373,13 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
 
   return (
     <div className="w-full min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="bg-black/50 backdrop-blur-sm border-2 border-white/20 rounded-2xl p-12 w-full max-w-2xl">
+      <div className="bg-gradient-to-br from-gray-900 to-green-900 border-2 border-white/20 text-white p-4 w-full max-w-2xl rounded-sm">
         <h3 className="text-white text-3xl mb-8 text-center font-bold">
           GAME LOBBY
         </h3>
 
         {/* Room Code */}
-        <div className="mb-8 bg-white/5 p-4 rounded-xl border border-white/10">
+        <div className="mb-8">
           <div className="text-white/70 text-sm mb-2 text-center">
             Room Code
           </div>
@@ -352,19 +387,9 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
             <div className="text-white text-6xl tracking-wider font-bold">
               {roomCode}
             </div>
-            <button
-              onClick={copyRoomCode}
-              className="h-10 w-10 p-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-              title="Copy room link"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 512 512"
-                className="fill-white"
-              >
-                <path d="M 416 336 L 224 336 L 416 336 L 224 336 Q 209 335 208 320 L 208 64 L 208 64 Q 209 49 224 48 L 364 48 L 364 48 L 432 116 L 432 116 L 432 320 L 432 320 Q 431 335 416 336 L 416 336 Z M 224 384 L 416 384 L 224 384 L 416 384 Q 443 383 461 365 Q 479 347 480 320 L 480 116 L 480 116 Q 480 96 466 82 L 398 14 L 398 14 Q 384 0 364 0 L 224 0 L 224 0 Q 197 1 179 19 Q 161 37 160 64 L 160 320 L 160 320 Q 161 347 179 365 Q 197 383 224 384 L 224 384 Z M 96 128 Q 69 129 51 147 L 51 147 L 51 147 Q 33 165 32 192 L 32 448 L 32 448 Q 33 475 51 493 Q 69 511 96 512 L 288 512 L 288 512 Q 315 511 333 493 Q 351 475 352 448 L 352 416 L 352 416 L 304 416 L 304 416 L 304 448 L 304 448 Q 303 463 288 464 L 96 464 L 96 464 Q 81 463 80 448 L 80 192 L 80 192 Q 81 177 96 176 L 128 176 L 128 176 L 128 128 L 128 128 L 96 128 L 96 128 Z" />
-              </svg>
-            </button>
+            <GlossyButton onClick={copyRoomCode} title="Copy room link" className="size-12">
+                <ClipboardCopy />
+            </GlossyButton>
           </div>
         </div>
 
@@ -443,8 +468,8 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
         ) : null}
 
         {players.length < 2 && (
-          <div className="mb-6 bg-blue-500/20 border-2 border-blue-500/50 rounded-xl p-4">
-            <p className="text-blue-200 text-center text-sm font-bold">
+          <div className="mb-6 p-4">
+            <p className="text-center text-sm font-bold mx-auto">
               Share the room code with a friend to start playing
             </p>
           </div>
