@@ -95,9 +95,9 @@ pub struct Game {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct Groth16Proof {
-    pub pi_a: Vec<BytesN<32>>,  // 2 elements (G1 point)
-    pub pi_b: Vec<BytesN<32>>,  // 4 elements (G2 point, 2 coordinates)
-    pub pi_c: Vec<BytesN<32>>,  // 2 elements (G1 point)
+    pub pi_a: BytesN<64>,
+    pub pi_b: BytesN<128>,
+    pub pi_c: BytesN<64>,
 }
 
 #[contracttype]
@@ -407,21 +407,18 @@ impl PockerContract {
         proof: Groth16Proof,
         public_signals: Vec<Bytes>,
     ) -> Result<(), Error> {
-        // Load verification key from contract storage
         let vk: VerificationKey = env
             .storage()
             .instance()
             .get(&DataKey::VerificationKey)
             .ok_or(Error::InvalidProof)?;
 
-        // Convert contract Groth16Proof to verifier Groth16Proof
         let verifier_proof = VerifierProof {
             pi_a: proof.pi_a,
             pi_b: proof.pi_b,
             pi_c: proof.pi_c,
         };
 
-        // Verify the proof using the verifier module
         let is_valid = verify_groth16(env, &vk, &verifier_proof, &public_signals)
             .map_err(|_| Error::InvalidProof)?;
 
