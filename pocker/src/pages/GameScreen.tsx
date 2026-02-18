@@ -3,7 +3,6 @@ import { useGameEngine } from "../hooks/useGameEngine";
 import { useWallet } from "../hooks/useWallet";
 import Header from "../components/Header";
 import { PokerTable } from "../components/PokerTable";
-import { PotDisplay } from "../components/PotDisplay";
 import { PlayerCardArea } from "../components/PlayerCardArea";
 import { GameControls } from "../components/GameControls";
 import { CommunityCards } from "../components/CommunityCards";
@@ -356,6 +355,16 @@ export function GameScreen({ onBack }: GameScreenProps) {
   };
 
   const handleRaise = () => {
+    if (!gameState) return;
+    
+    // Calculate opponent's bet from game state
+    const isPlayer1 = gameState.player1 === publicKey;
+    const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
+    
+    // Set betAmount to minBet when opening slider
+    const minRaiseStroops = opponentBet > 0 ? opponentBet * BigInt(2) : BigInt(10000000);
+    const minBetValue = Number(minRaiseStroops) / 10000000;
+    setBetAmount(minBetValue);
     setShowRaiseSlider(true);
   };
 
@@ -493,19 +502,13 @@ export function GameScreen({ onBack }: GameScreenProps) {
 
   return (
     <>
-      <Header showBackButton={false} />
+      <Header 
+        showBackButton={false} 
+        potAmount={potAmount}
+        phase={phase}
+      />
       
       <PokerTable>
-        <PotDisplay
-          amount={potAmount}
-          myCommitted={myCommitted}
-          opponentCommitted={opponentCommitted}
-          bothCommitted={bothCommitted}
-          isCommitPhase={isCommitPhase}
-          isRevealPhase={isShowdownPhase}
-          isComplete={isComplete}
-        />
-
         <CommunityCards 
           phase={phase}
           communityCards={gameState.community_cards || []}

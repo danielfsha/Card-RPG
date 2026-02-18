@@ -4,9 +4,11 @@ import { WalletModal } from "./WalletModal";
 interface HeaderProps {
   onBack?: () => void;
   showBackButton?: boolean;
+  potAmount?: number;
+  phase?: string;
 }
 
-export default function Header({ onBack, showBackButton = false }: HeaderProps) {
+export default function Header({ onBack, showBackButton = false, potAmount, phase }: HeaderProps) {
   const { publicKey } = useWallet();
 
   return (
@@ -23,6 +25,16 @@ export default function Header({ onBack, showBackButton = false }: HeaderProps) 
         )}
         <img src="/logo.png" className="h-12" alt="Logo" />
       </div>
+
+      {/* Pot Display in Header */}
+      {potAmount !== undefined && (
+        <div className="absolute left-1/2 -translate-x-1/2 text-center">
+          <div className="text-white/70 text-xs mb-1">{phase || "POT"}</div>
+          <div className="text-white text-2xl font-bold drop-shadow-lg">
+            {potAmount.toFixed(2)} XLM
+          </div>
+        </div>
+      )}
 
       {publicKey && <WalletModal />}
     </header>
