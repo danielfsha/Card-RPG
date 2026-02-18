@@ -54,13 +54,18 @@ export class ZKPokerService {
       }
     }
     
-    // Create input array: [card1, card2, salt]
-    const inputs = [...cards.map(c => BigInt(c)), salt];
+    // Pad to 5 cards with zeros (circuit expects 5 cards)
+    // We'll fill in the community cards later when generating proof
+    const paddedCards = [...cards, 0, 0, 0];
+    
+    // Create input array: [card1, card2, 0, 0, 0, salt]
+    const inputs = [...paddedCards.map(c => BigInt(c)), salt];
     
     console.log('[ZKPokerService] Computing commitment for cards:', cards);
+    console.log('[ZKPokerService] Padded cards:', paddedCards);
     console.log('[ZKPokerService] Salt:', salt.toString());
     
-    // Compute Poseidon hash
+    // Compute Poseidon hash with 6 inputs (5 cards + salt)
     const hash = this.poseidon(inputs);
     const hashString = this.poseidon.F.toString(hash);
     

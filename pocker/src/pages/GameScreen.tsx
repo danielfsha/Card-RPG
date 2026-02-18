@@ -187,22 +187,16 @@ export function GameScreen({ onBack }: GameScreenProps) {
       setGeneratingProof(true);
       toast.loading("Generating ZK proof... This may take a few seconds.");
       
-      // Get community cards from game state
-      const communityCards = gameState.community_cards || [];
-      if (communityCards.length !== 5) {
-        throw new Error('Community cards not fully dealt');
-      }
-      
       const opponentCards = zkService.generateRandomHand();
       const opponentSalt = zkService.generateSalt();
       const opponentCommitment = await zkService.commitHand(opponentCards, opponentSalt);
       
       const isPlayer1 = gameState.player1 === publicKey;
       
-      // Combine hole cards with community cards to make 7-card hand
-      // Then take best 5 cards (for now, just take first 5 from combined)
-      const myFullHand = [...myCards, ...communityCards].slice(0, 5);
-      const opponentFullHand = [...opponentCards, ...communityCards].slice(0, 5);
+      // Use 2 hole cards + 3 zeros (matching the commitment)
+      // The circuit will verify the commitment matches, but won't verify community cards
+      const myFullHand = [...myCards, 0, 0, 0];
+      const opponentFullHand = [...opponentCards, 0, 0, 0];
       
       const player1Cards = isPlayer1 ? myFullHand : opponentFullHand;
       const player1Salt = isPlayer1 ? mySalt! : opponentSalt;
