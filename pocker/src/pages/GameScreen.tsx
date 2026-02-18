@@ -6,10 +6,9 @@ import { PokerTable } from "../components/PokerTable";
 import { PotDisplay } from "../components/PotDisplay";
 import { PlayerCardArea } from "../components/PlayerCardArea";
 import { GameControls } from "../components/GameControls";
-import { GameInfo } from "../components/GameInfo";
+import { CommunityCards } from "../components/CommunityCards";
 import toast from "react-hot-toast";
 import { ZKPokerService } from "../services/zkService";
-import cardsData from "../../public/cards.json";
 
 interface GameScreenProps {
   onBack: () => void;
@@ -27,12 +26,12 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const [mySalt, setMySalt] = useState<bigint>();
   const [myCommitment, setMyCommitment] = useState<string>();
   const [generatingProof, setGeneratingProof] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [isRevealing, setIsRevealing] = useState(false);
   
   // Betting state
   const [betAmount, setBetAmount] = useState(1);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
-  const minBet = 1;
-  const maxBet = 100;
 
   // Load game state
   const loadGameState = async () => {
@@ -100,9 +99,43 @@ export function GameScreen({ onBack }: GameScreenProps) {
     };
   }, [sessionId]);
 
+  useEffect(() => {
+    if (!gameState || loading) return;
+    
+    const phase = gameState.phase?.tag || "Commit";
+    const isPlayer1 = gameState.player1 === publicKey;
+    const myCommitted = isPlayer1 
+      ? gameState.player1_hole_commitment !== null 
+      : gameState.player2_hole_commitment !== null;
+    const opponentCommitted = isPlayer1 
+      ? gameState.player2_hole_commitment !== null 
+      : gameState.player1_hole_commitment !== null;
+    const bothCommitted = myCommitted && opponentCommitted;
+    
+    // Poll if we're waiting for opponent to commit or if it's not our turn
+    const shouldPoll = (myCommitted && !bothCommitted && phase === "Commit") || 
+                       (phase !== "Commit" && phase !== "Complete" && Number(gameState.current_actor) !== (isPlayer1 ? 0 : 1));
+    
+    if (!shouldPoll) return;
+    
+    console.log("[GameScreen] Starting polling for game updates...");
+    const pollInterval = setInterval(async () => {
+      console.log("[GameScreen] Polling for game state update...");
+      await loadGameState();
+    }, 3000);
+    
+    return () => {
+      console.log("[GameScreen] Stopping polling");
+      clearInterval(pollInterval);
+    };
+  }, [gameState, loading, publicKey]);
+
   // Commit Phase: Generate hand and submit commitment
   const handleCommit = async () => {
+    if (isCommitting) return; // Prevent spam
+    
     try {
+      setIsCommitting(true);
       toast.loading("Generating hand and commitment...");
       
       const cards = zkService.generateRandomHand();
@@ -123,7 +156,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
       const signer = getContractSigner();
       
       const pockerService = new PockerService(POCKER_CONTRACT);
-      await pockerService.submitCommitment(
+      await pockerService.submitHoleCommitment(
         sessionId,
         publicKey!,
         commitment,
@@ -131,12 +164,6 @@ export function GameScreen({ onBack }: GameScreenProps) {
       );
       
       toast.success("Commitment submitted!");
-      
-      const cardNames = cards.map(c => {
-        const info = cardsData.cards[c.toString() as keyof typeof cardsData.cards];
-        return info ? info.display : `Card ${c}`;
-      }).join(" ");
-      toast.success(`Your hand: ${cardNames}`, { duration: 5000 });
       
       // Reload game state to update myCommitted flag
       console.log("[GameScreen] Reloading game state after commit...");
@@ -147,12 +174,17 @@ export function GameScreen({ onBack }: GameScreenProps) {
       toast.dismiss();
       console.error("[GameScreen] Error committing:", err);
       toast.error(err.message || "Failed to commit hand");
+    } finally {
+      setIsCommitting(false);
     }
   };
 
   // Reveal Phase: Generate and submit ZK proof
   const handleReveal = async () => {
+    if (isRevealing || generatingProof) return; // Prevent spam
+    
     try {
+      setIsRevealing(true);
       setGeneratingProof(true);
       toast.loading("Generating ZK proof... This may take a few seconds.");
       
@@ -217,24 +249,156 @@ export function GameScreen({ onBack }: GameScreenProps) {
       toast.error(err.message || "Failed to reveal winner");
     } finally {
       setGeneratingProof(false);
+      setIsRevealing(false);
     }
   };
 
-  const handleFold = () => {
-    toast("Fold functionality coming soon!");
+  const handleFold = async () => {
+    try {
+      toast.loading("Folding...");
+      
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT } = await import("../utils/constants");
+      const signer = getContractSigner();
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      
+      // Create Fold action
+      const foldAction = { tag: "Fold" as const, values: undefined };
+      
+      await pockerService.playerAction(
+        sessionId,
+        publicKey!,
+        foldAction,
+        signer
+      );
+      
+      toast.dismiss();
+      toast.success("You folded. Opponent wins!");
+      
+      // Reload game state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadGameState();
+      
+    } catch (err: any) {
+      toast.dismiss();
+      console.error("[GameScreen] Error folding:", err);
+      toast.error(err.message || "Failed to fold");
+    }
   };
 
-  const handleCall = () => {
-    toast("Call functionality coming soon!");
+  const handleCall = async () => {
+    try {
+      toast.loading("Calling...");
+      
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT } = await import("../utils/constants");
+      const signer = getContractSigner();
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      
+      // Create Call action
+      const callAction = { tag: "Call" as const, values: undefined };
+      
+      await pockerService.playerAction(
+        sessionId,
+        publicKey!,
+        callAction,
+        signer
+      );
+      
+      toast.dismiss();
+      toast.success("Called!");
+      
+      // Reload game state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadGameState();
+      
+    } catch (err: any) {
+      toast.dismiss();
+      console.error("[GameScreen] Error calling:", err);
+      toast.error(err.message || "Failed to call");
+    }
+  };
+
+  const handleCheck = async () => {
+    try {
+      toast.loading("Checking...");
+      
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT } = await import("../utils/constants");
+      const signer = getContractSigner();
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      
+      // Create Check action
+      const checkAction = { tag: "Check" as const, values: undefined };
+      
+      await pockerService.playerAction(
+        sessionId,
+        publicKey!,
+        checkAction,
+        signer
+      );
+      
+      toast.dismiss();
+      toast.success("Checked!");
+      
+      // Reload game state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadGameState();
+      
+    } catch (err: any) {
+      toast.dismiss();
+      console.error("[GameScreen] Error checking:", err);
+      toast.error(err.message || "Failed to check");
+    }
   };
 
   const handleRaise = () => {
     setShowRaiseSlider(true);
   };
 
-  const handleRaiseConfirm = () => {
-    toast.success(`Raised ${betAmount} XLM!`);
-    setShowRaiseSlider(false);
+  const handleRaiseConfirm = async () => {
+    try {
+      toast.loading(`Raising to ${betAmount} XLM...`);
+      
+      const { PockerService } = await import("../games/pocker/pockerService");
+      const { POCKER_CONTRACT } = await import("../utils/constants");
+      const signer = getContractSigner();
+      
+      const pockerService = new PockerService(POCKER_CONTRACT);
+      
+      // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
+      const amountInStroops = BigInt(betAmount * 10000000);
+      
+      // Create Raise action
+      const raiseAction = { 
+        tag: "Raise" as const, 
+        values: [amountInStroops] as const 
+      };
+      
+      await pockerService.playerAction(
+        sessionId,
+        publicKey!,
+        raiseAction,
+        signer
+      );
+      
+      toast.dismiss();
+      toast.success(`Raised to ${betAmount} XLM!`);
+      setShowRaiseSlider(false);
+      
+      // Reload game state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await loadGameState();
+      
+    } catch (err: any) {
+      toast.dismiss();
+      console.error("[GameScreen] Error raising:", err);
+      toast.error(err.message || "Failed to raise");
+      setShowRaiseSlider(false);
+    }
   };
 
   if (loading) {
@@ -281,20 +445,51 @@ export function GameScreen({ onBack }: GameScreenProps) {
 
   const isPlayer1 = gameState.player1 === publicKey;
   const myCommitted = isPlayer1 
-    ? gameState.player1_commitment !== null 
-    : gameState.player2_commitment !== null;
+    ? gameState.player1_hole_commitment !== null 
+    : gameState.player2_hole_commitment !== null;
   const opponentCommitted = isPlayer1 
-    ? gameState.player2_commitment !== null 
-    : gameState.player1_commitment !== null;
+    ? gameState.player2_hole_commitment !== null 
+    : gameState.player1_hole_commitment !== null;
   const bothCommitted = myCommitted && opponentCommitted;
   const hasWinner = gameState.winner !== null && gameState.winner !== undefined;
   
   const phase = gameState.phase?.tag || "Commit";
   const isCommitPhase = phase === "Commit";
-  const isRevealPhase = phase === "Reveal";
+  const isBettingPhase = phase === "Preflop" || phase === "Flop" || phase === "Turn" || phase === "River";
+  const isShowdownPhase = phase === "Showdown";
   const isComplete = phase === "Complete" || hasWinner;
-
-  const potAmount = gameState.player1_points ? Number(gameState.player1_points) / 10000000 : 0;
+  
+  // Check if it's my turn
+  const playerIndex = isPlayer1 ? 0 : 1;
+  const isMyTurn = Number(gameState.current_actor) === playerIndex;
+  
+  console.log('[GameScreen] Turn info:', {
+    current_actor: gameState.current_actor,
+    playerIndex,
+    isMyTurn,
+    isPlayer1,
+    phase
+  });
+  
+  // Get betting info
+  const myStack = isPlayer1 ? gameState.player1_stack : gameState.player2_stack;
+  const myBet = isPlayer1 ? gameState.player1_bet : gameState.player2_bet;
+  const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
+  const potAmount = gameState.pot ? Number(gameState.pot) / 10000000 : 0;
+  const myStackXLM = myStack ? Number(myStack) / 10000000 : 0;
+  const myBetXLM = myBet ? Number(myBet) / 10000000 : 0;
+  const opponentBetXLM = opponentBet ? Number(opponentBet) / 10000000 : 0;
+  
+  // Can check if no bet to call
+  const canCheck = opponentBet === myBet;
+  const needsToCall = opponentBet > myBet;
+  
+  // Calculate min/max raise amounts
+  // Min raise is 2x opponent's bet (contract requirement)
+  // Max raise is your entire stack
+  const minRaiseStroops = opponentBet > 0 ? opponentBet * BigInt(2) : BigInt(10000000); // Min 1 XLM if no bet
+  const minBet = Number(minRaiseStroops) / 10000000;
+  const maxBet = myStackXLM;
 
   return (
     <>
@@ -307,8 +502,13 @@ export function GameScreen({ onBack }: GameScreenProps) {
           opponentCommitted={opponentCommitted}
           bothCommitted={bothCommitted}
           isCommitPhase={isCommitPhase}
-          isRevealPhase={isRevealPhase}
+          isRevealPhase={isShowdownPhase}
           isComplete={isComplete}
+        />
+
+        <CommunityCards 
+          phase={phase}
+          communityCards={gameState.community_cards || []}
         />
 
         <PlayerCardArea
@@ -324,24 +524,36 @@ export function GameScreen({ onBack }: GameScreenProps) {
           showCards={true}
           position="bottom"
         />
-
-        {/* <GameInfo phase={phase} sessionId={sessionId} /> */}
       </PokerTable>
 
       <GameControls
         myCommitted={myCommitted}
-        isRevealPhase={isRevealPhase}
+        bothCommitted={bothCommitted}
+        isCommitPhase={isCommitPhase}
+        isBettingPhase={isBettingPhase}
+        isShowdownPhase={isShowdownPhase}
         isComplete={isComplete}
+        isMyTurn={isMyTurn}
+        canCheck={canCheck}
+        needsToCall={needsToCall}
         generatingProof={generatingProof}
+        isCommitting={isCommitting}
+        isRevealing={isRevealing}
         showRaiseSlider={showRaiseSlider}
         betAmount={betAmount}
         minBet={minBet}
         maxBet={maxBet}
+        myStackXLM={myStackXLM}
+        myBetXLM={myBetXLM}
+        opponentBetXLM={opponentBetXLM}
+        potAmount={potAmount}
+        phase={phase}
         winner={gameState.winner}
         publicKey={publicKey!}
         onCommit={handleCommit}
         onFold={handleFold}
         onCall={handleCall}
+        onCheck={handleCheck}
         onRaise={handleRaise}
         onReveal={handleReveal}
         onBack={onBack}

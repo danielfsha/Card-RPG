@@ -23,25 +23,6 @@ export function PotDisplay({
       <div className="text-white text-4xl font-bold drop-shadow-lg">
         ${amount}
       </div>
-      
-      {/* Status Message */}
-      <div className="mt-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20">
-        {!myCommitted && (
-          <div className="text-yellow-300 text-sm">Waiting for you to commit</div>
-        )}
-        {myCommitted && !opponentCommitted && (
-          <div className="text-blue-300 text-sm">Waiting for opponent...</div>
-        )}
-        {bothCommitted && isCommitPhase && (
-          <div className="text-green-300 text-sm">Both committed! Play your hand</div>
-        )}
-        {isRevealPhase && (
-          <div className="text-purple-300 text-sm">Ready to reveal winner</div>
-        )}
-        {isComplete && (
-          <div className="text-green-300 text-sm font-bold">Game Complete!</div>
-        )}
-      </div>
     </div>
   );
 }

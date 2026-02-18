@@ -1,4 +1,3 @@
-import React from "react";
 import cardsData from "../../public/cards.json";
 
 interface CardData {
@@ -90,8 +89,8 @@ export function PlayerCardArea({ label, cards, showCards, position }: PlayerCard
           // Render actual cards
           cards.map((cardId, i) => renderCardItem(false, cardId, i, cards.length))
         ) : !showCards ? (
-          // Render backs (default to 5 cards for "Waiting" state)
-          [0, 1, 2, 3, 4].map((i) => renderCardItem(true, 0, i, 5))
+          // Render backs (2 cards for hole cards)
+          [0, 1].map((i) => renderCardItem(true, 0, i, 2))
         ) : (
           <div className="text-white/40 text-xs italic">No cards dealt</div>
         )}

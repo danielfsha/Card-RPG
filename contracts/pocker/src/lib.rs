@@ -114,6 +114,9 @@ pub struct Game {
     pub player1_hole_commitment: Option<Bytes>,  // Poseidon hash of 2 hole cards
     pub player2_hole_commitment: Option<Bytes>,
     
+    // Community cards (5 cards, 0-51 representing deck)
+    pub community_cards: Vec<u32>,  // Actual card values generated deterministically
+    
     // Community cards commitment (5 cards)
     pub community_commitment: Option<Bytes>,
     
@@ -244,6 +247,7 @@ impl PockerContract {
             pot: 0,
             player1_hole_commitment: None,
             player2_hole_commitment: None,
+            community_cards: Vec::new(&env),  // Will be generated when both players commit
             community_commitment: None,
             community_revealed: 0,
             current_actor: 0,  // Player 1 starts
@@ -314,6 +318,8 @@ impl PockerContract {
 
         // If both players have committed, move to Preflop betting phase
         if game.player1_hole_commitment.is_some() && game.player2_hole_commitment.is_some() {
+            // Generate deterministic community cards using PRNG
+            game.community_cards = Self::generate_community_cards(&env, session_id);
             game.phase = Phase::Preflop;
             game.current_actor = 0;  // Player 1 acts first preflop
         }
@@ -571,6 +577,40 @@ impl PockerContract {
         }
         
         game.player1_bet == game.player2_bet
+    }
+
+    /// Generate 5 deterministic community cards using session_id as seed
+    fn generate_community_cards(env: &Env, session_id: u32) -> Vec<u32> {
+        // Use keccak256 hash of session_id as seed for deterministic randomness
+        let mut seed_bytes = Bytes::new(env);
+        seed_bytes.append(&Bytes::from_array(env, &session_id.to_be_bytes()));
+        let seed_hash = env.crypto().keccak256(&seed_bytes);
+        
+        let mut prng = env.prng();
+        prng.seed(seed_hash.into());
+        
+        // Create a deck of 52 cards (0-51)
+        let mut deck: Vec<u32> = Vec::new(env);
+        for i in 0u32..52u32 {
+            deck.push_back(i);
+        }
+        
+        // Fisher-Yates shuffle using PRNG
+        for i in (1u32..52u32).rev() {
+            let j = prng.gen_range::<u64>(0..((i + 1) as u64)) as u32;
+            // Swap deck[i] and deck[j]
+            let temp = deck.get(i).unwrap();
+            deck.set(i, deck.get(j).unwrap());
+            deck.set(j, temp);
+        }
+        
+        // Take first 5 cards as community cards
+        let mut community: Vec<u32> = Vec::new(env);
+        for i in 0u32..5u32 {
+            community.push_back(deck.get(i).unwrap());
+        }
+        
+        community
     }
 
     /// Reveal the winner using a ZK proof

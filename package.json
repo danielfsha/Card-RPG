@@ -9,6 +9,7 @@
     "bindings": "bun run scripts/bindings.ts",
     "create": "bun run scripts/create.ts",
     "publish": "bun run scripts/publish.ts",
+    "update-config": "bun run scripts/update-config.ts",
     "dev": "bun --cwd=sgs_frontend run dev",
     "dev:game": "bun run scripts/dev-game.ts"
   },

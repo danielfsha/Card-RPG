@@ -36,15 +36,15 @@ export class ZKPokerService {
   /**
    * Generate commitment for a hand using Poseidon hash
    * 
-   * @param cards - Array of 5 card values (0-51)
+   * @param cards - Array of 2 card values (0-51) for hole cards
    * @param salt - Random salt for commitment
    * @returns Commitment hash as string
    */
   async commitHand(cards: number[], salt: bigint): Promise<string> {
     if (!this.initialized) await this.initialize();
     
-    if (cards.length !== 5) {
-      throw new Error('Hand must contain exactly 5 cards');
+    if (cards.length !== 2) {
+      throw new Error('Hand must contain exactly 2 cards (hole cards)');
     }
 
     // Validate card values
@@ -54,7 +54,7 @@ export class ZKPokerService {
       }
     }
     
-    // Create input array: [card1, card2, card3, card4, card5, salt]
+    // Create input array: [card1, card2, salt]
     const inputs = [...cards.map(c => BigInt(c)), salt];
     
     console.log('[ZKPokerService] Computing commitment for cards:', cards);
@@ -86,16 +86,16 @@ export class ZKPokerService {
   }
 
   /**
-   * Generate random poker hand (5 cards)
+   * Generate random poker hand (2 hole cards for Texas Hold'em)
    * 
-   * @returns Array of 5 unique card values (0-51)
+   * @returns Array of 2 unique card values (0-51)
    */
   generateRandomHand(): number[] {
     const deck = Array.from({ length: 52 }, (_, i) => i);
     const hand: number[] = [];
     
-    // Fisher-Yates shuffle to pick 5 cards
-    for (let i = 0; i < 5; i++) {
+    // Fisher-Yates shuffle to pick 2 cards
+    for (let i = 0; i < 2; i++) {
       const randomIndex = Math.floor(Math.random() * (deck.length - i)) + i;
       [deck[i], deck[randomIndex]] = [deck[randomIndex], deck[i]];
       hand.push(deck[i]);

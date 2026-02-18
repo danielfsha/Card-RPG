@@ -7,6 +7,14 @@ import { getRuntimeConfig } from './runtimeConfig';
 
 const runtimeConfig = getRuntimeConfig();
 
+// Log config for debugging
+console.log('[Constants] Runtime config loaded:', runtimeConfig);
+console.log('[Constants] Environment variables:', {
+  VITE_POCKER_CONTRACT_ID: import.meta.env.VITE_POCKER_CONTRACT_ID,
+  VITE_SOROBAN_RPC_URL: import.meta.env.VITE_SOROBAN_RPC_URL,
+  VITE_NETWORK_PASSPHRASE: import.meta.env.VITE_NETWORK_PASSPHRASE,
+});
+
 export const SOROBAN_RPC_URL =
   runtimeConfig?.rpcUrl || import.meta.env.VITE_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 export const RPC_URL = SOROBAN_RPC_URL; // Alias for compatibility
@@ -24,9 +32,17 @@ function contractEnvKey(crateName: string): string {
 
 export function getContractId(crateName: string): string {
   const runtimeId = runtimeConfig?.contractIds?.[crateName];
-  if (runtimeId) return runtimeId;
   const env = import.meta.env as unknown as Record<string, string>;
-  return env[contractEnvKey(crateName)] || '';
+  const envId = env[contractEnvKey(crateName)] || '';
+  
+  const finalId = runtimeId || envId;
+  console.log(`[Constants] getContractId("${crateName}"):`, {
+    runtimeId,
+    envId,
+    finalId
+  });
+  
+  return finalId;
 }
 
 export function getAllContractIds(): Record<string, string> {
@@ -57,6 +73,11 @@ export function getAllContractIds(): Record<string, string> {
 // Contract IDs
 export const POCKER_CONTRACT = getContractId('pocker');
 export const MOCK_GAME_HUB_CONTRACT = getContractId('mock-game-hub');
+
+console.log('[Constants] Final contract IDs:', {
+  POCKER_CONTRACT,
+  MOCK_GAME_HUB_CONTRACT,
+});
 
 // Dev wallet addresses
 export const DEV_ADMIN_ADDRESS = import.meta.env.VITE_DEV_ADMIN_ADDRESS || '';

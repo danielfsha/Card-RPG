@@ -8,8 +8,6 @@ import {
 } from "@/utils/constants";
 import {
   contract,
-  TransactionBuilder,
-  StrKey,
   xdr,
   Address,
   authorizeEntry,
@@ -392,9 +390,9 @@ export class PockerService {
   }
 
   /**
-   * Submit a commitment for your hand (Poseidon hash)
+   * Submit a commitment for your 2 hole cards (Poseidon hash)
    */
-  async submitCommitment(
+  async submitHoleCommitment(
     sessionId: number,
     playerAddress: string,
     commitment: string,
@@ -405,11 +403,11 @@ export class PockerService {
     
     const commitmentBytes = Buffer.from(commitment, 'utf-8');
     
-    const tx = await client.submit_commitment(
+    const tx = await client.submit_hole_commitment(
       {
         session_id: sessionId,
         player: playerAddress,
-        commitment: commitmentBytes,
+        hole_commitment: commitmentBytes,
       },
       DEFAULT_METHOD_OPTIONS,
     );
@@ -425,6 +423,75 @@ export class PockerService {
     );
     return sentTx.result;
   }
+
+  /**
+   * Submit community cards commitment (5 cards)
+   */
+  async submitCommunityCommitment(
+    sessionId: number,
+    playerAddress: string,
+    commitment: string,
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
+  ) {
+    const client = this.createSigningClient(playerAddress, signer);
+    
+    const commitmentBytes = Buffer.from(commitment, 'utf-8');
+    
+    const tx = await client.submit_community_commitment(
+      {
+        session_id: sessionId,
+        community_commitment: commitmentBytes,
+      },
+      DEFAULT_METHOD_OPTIONS,
+    );
+
+    const validUntilLedgerSeq = authTtlMinutes
+      ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
+      : await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
+
+    const sentTx = await signAndSendViaLaunchtube(
+      tx,
+      DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
+      validUntilLedgerSeq,
+    );
+    return sentTx.result;
+  }
+
+  /**
+   * Execute a betting action (fold, check, call, bet, raise, all-in)
+   */
+  async playerAction(
+    sessionId: number,
+    playerAddress: string,
+    action: any, // Action type from bindings
+    signer: Pick<contract.ClientOptions, "signTransaction" | "signAuthEntry">,
+    authTtlMinutes?: number,
+  ) {
+    const client = this.createSigningClient(playerAddress, signer);
+    
+    const tx = await client.player_action(
+      {
+        session_id: sessionId,
+        player: playerAddress,
+        action: action,
+      },
+      DEFAULT_METHOD_OPTIONS,
+    );
+
+    const validUntilLedgerSeq = authTtlMinutes
+      ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
+      : await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
+
+    const sentTx = await signAndSendViaLaunchtube(
+      tx,
+      DEFAULT_METHOD_OPTIONS.timeoutInSeconds,
+      validUntilLedgerSeq,
+    );
+    return sentTx.result;
+  }
+
+
 
   /**
    * Reveal the winner using a ZK proof

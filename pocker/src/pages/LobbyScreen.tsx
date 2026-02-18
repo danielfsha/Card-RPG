@@ -336,7 +336,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
       // Share auth entry with Player 2 via Playroom
       setP1AuthEntryXDR(authEntryXDR);
 
-      toast.success("Auth entry shared! Waiting for Player 2...");
+      toast.success("Waiting for Player 2...", { duration: 3000 });
 
       // Poll for game creation (Player 2 will finalize)
       const pollInterval = setInterval(async () => {
