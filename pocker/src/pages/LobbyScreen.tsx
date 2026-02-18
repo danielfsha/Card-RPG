@@ -4,7 +4,7 @@ import GlossyButton from "../components/GlossyButton";
 import { useWallet } from "../hooks/useWallet";
 import { useGameEngine } from "../hooks/useGameEngine";
 import toast from "react-hot-toast";
-import { ClipboardCopy, ClipboardCopyIcon } from "lucide-react";
+import { ClipboardCopy } from "lucide-react";
 
 interface LobbyScreenProps {
   onStartGame: () => void;
@@ -13,7 +13,6 @@ interface LobbyScreenProps {
 export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
   const { publicKey, getContractSigner } = useWallet();
   const {
-    sessionId,
     startGame: initGameSession,
     setP1AuthEntryXDR,
     p1AuthEntryXDR,

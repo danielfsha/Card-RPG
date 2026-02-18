@@ -7,14 +7,12 @@ import { contract } from '@stellar/stellar-sdk';
 /**
  * Sign and send a transaction via Launchtube
  * @param tx - The assembled transaction or XDR string
- * @param timeoutInSeconds - Timeout for the transaction
- * @param validUntilLedgerSeq - Valid until ledger sequence
  * @returns Transaction result
  */
 export async function signAndSendViaLaunchtube(
   tx: contract.AssembledTransaction<any> | string,
-  timeoutInSeconds: number = 30,
-  validUntilLedgerSeq?: number
+  _timeoutInSeconds: number = 30,
+  _validUntilLedgerSeq?: number
 ): Promise<contract.SentTransaction<any>> {
   // If tx is an AssembledTransaction, simulate and send
   if (typeof tx !== 'string' && 'simulate' in tx) {

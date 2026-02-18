@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
 import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils";
-import { KitEventType, Networks } from "@creit-tech/stellar-wallets-kit/types";
+import { Networks } from "@creit-tech/stellar-wallets-kit/types";
 import {
   signAuthEntry as freighterSignAuthEntry,
   isConnected as isFreighterConnected,

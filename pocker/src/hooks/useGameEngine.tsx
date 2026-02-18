@@ -3,7 +3,6 @@ import {
   useMultiplayerState,
   usePlayersList,
   isHost,
-  onPlayerJoin,
   me,
 } from "playroomkit";
 

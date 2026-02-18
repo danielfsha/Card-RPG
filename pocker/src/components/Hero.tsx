@@ -12,9 +12,7 @@ export default function Hero() {
       </p>
 
    <div className="w-128">
-       <GlossySlider value={0} min={0} max={0} onChange={function (value: number): void {
-        throw new Error("Function not implemented.");
-      } } />
+       <GlossySlider value={0} min={0} max={0} onChange={() => {}} />
    </div>
 
       <div className="flex flex-col items-center justify-center space-y-2 w-128">

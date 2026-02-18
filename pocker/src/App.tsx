@@ -9,10 +9,8 @@ import { SettingsScreen } from "./pages/SettingsScreen";
 import { LobbyScreen } from "./pages/LobbyScreen";
 import { GameScreen } from "./pages/GameScreen";
 
-import { ConfigDebug } from "./components/ConfigDebug";
-
 function App() {
-  const { publicKey, isConnected, isConnecting, connect, error } = useWallet();
+  const { isConnected, isConnecting, connect, error } = useWallet();
 
   const [gameMode, setGameMode] = useState<"single" | "multi" | null>(null);
   const [playroomLoading, setPlayroomLoading] = useState(false);

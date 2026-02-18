@@ -1,5 +1,5 @@
 import { StrKey } from '@stellar/stellar-sdk';
-import { NETWORK, SOROBAN_RPC_URL } from './constants';
+import { NETWORK } from './constants';
 
 // Dev addresses from .env
 const DEV_ADMIN_ADDRESS = import.meta.env.VITE_DEV_ADMIN_ADDRESS || '';

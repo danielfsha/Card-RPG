@@ -113,7 +113,7 @@ class DevWalletService {
         }
       },
 
-      signAuthEntry: async (preimageXdr: string, opts?: any) => {
+      signAuthEntry: async (preimageXdr: string, _opts?: any) => {
         try {
           const preimageBytes = Buffer.from(preimageXdr, 'base64');
           const payload = hash(preimageBytes);
