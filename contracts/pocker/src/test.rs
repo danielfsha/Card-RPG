@@ -142,29 +142,29 @@ fn test_commit_phase() {
     // Start game
     pocker.start_game(&session_id, &player1, &player2, &100i128, &100i128);
 
-    // Player 1 commits
+    // Player 1 commits hole cards (2 cards)
     let commitment1 = Bytes::from_slice(
         &env,
         b"commitment1_hash_poseidon_12345678901234567890",
     );
-    pocker.submit_commitment(&session_id, &player1, &commitment1);
+    pocker.submit_hole_commitment(&session_id, &player1, &commitment1);
 
     let game = pocker.get_game(&session_id).unwrap();
-    assert!(game.player1_commitment.is_some());
-    assert!(game.player2_commitment.is_none());
+    assert!(game.player1_hole_commitment.is_some());
+    assert!(game.player2_hole_commitment.is_none());
     assert_eq!(game.phase, Phase::Commit);
 
-    // Player 2 commits
+    // Player 2 commits hole cards (2 cards)
     let commitment2 = Bytes::from_slice(
         &env,
         b"commitment2_hash_poseidon_98765432109876543210",
     );
-    pocker.submit_commitment(&session_id, &player2, &commitment2);
+    pocker.submit_hole_commitment(&session_id, &player2, &commitment2);
 
     let game = pocker.get_game(&session_id).unwrap();
-    assert!(game.player1_commitment.is_some());
-    assert!(game.player2_commitment.is_some());
-    assert_eq!(game.phase, Phase::Reveal); // Should move to Reveal phase
+    assert!(game.player1_hole_commitment.is_some());
+    assert!(game.player2_hole_commitment.is_some());
+    assert_eq!(game.phase, Phase::Preflop); // Should move to Preflop phase
 }
 
 #[test]
@@ -186,10 +186,10 @@ fn test_cannot_commit_twice() {
     pocker.start_game(&session_id, &player1, &player2, &100i128, &100i128);
 
     let commitment = Bytes::from_slice(&env, b"commitment_hash");
-    pocker.submit_commitment(&session_id, &player1, &commitment);
+    pocker.submit_hole_commitment(&session_id, &player1, &commitment);
 
     // Try to commit again
-    pocker.submit_commitment(&session_id, &player1, &commitment);
+    pocker.submit_hole_commitment(&session_id, &player1, &commitment);
 }
 
 #[test]
@@ -209,26 +209,16 @@ fn test_reveal_winner() {
     let session_id = 1u32;
     pocker.start_game(&session_id, &player1, &player2, &100i128, &100i128);
 
-    // Both players commit
+    // Both players commit hole cards
     let commitment1 = Bytes::from_slice(&env, b"commitment1_hash");
     let commitment2 = Bytes::from_slice(&env, b"commitment2_hash");
-    pocker.submit_commitment(&session_id, &player1, &commitment1);
-    pocker.submit_commitment(&session_id, &player2, &commitment2);
+    pocker.submit_hole_commitment(&session_id, &player1, &commitment1);
+    pocker.submit_hole_commitment(&session_id, &player2, &commitment2);
 
     // Create mock proof (in real game, this would be a valid ZK proof)
-    let mut proof_pi_a = Vec::new(&env);
-    proof_pi_a.push_back(BytesN::from_array(&env, &[0u8; 32]));
-    proof_pi_a.push_back(BytesN::from_array(&env, &[1u8; 32]));
-
-    let mut proof_pi_b = Vec::new(&env);
-    proof_pi_b.push_back(BytesN::from_array(&env, &[2u8; 32]));
-    proof_pi_b.push_back(BytesN::from_array(&env, &[3u8; 32]));
-    proof_pi_b.push_back(BytesN::from_array(&env, &[4u8; 32]));
-    proof_pi_b.push_back(BytesN::from_array(&env, &[5u8; 32]));
-
-    let mut proof_pi_c = Vec::new(&env);
-    proof_pi_c.push_back(BytesN::from_array(&env, &[6u8; 32]));
-    proof_pi_c.push_back(BytesN::from_array(&env, &[7u8; 32]));
+    let proof_pi_a = BytesN::from_array(&env, &[0u8; 64]);
+    let proof_pi_b = BytesN::from_array(&env, &[1u8; 128]);
+    let proof_pi_c = BytesN::from_array(&env, &[2u8; 64]);
 
     let proof = Groth16Proof {
         pi_a: proof_pi_a,
@@ -237,14 +227,16 @@ fn test_reveal_winner() {
     };
 
     // Create public signals
-    // [0] = player1_commitment
-    // [1] = player2_commitment
-    // [2] = player1_ranking (e.g., 5 = Flush)
-    // [3] = player2_ranking (e.g., 3 = Three of a Kind)
-    // [4] = winner (1 = player1)
+    // [0] = player1_hole_commitment
+    // [1] = player2_hole_commitment
+    // [2] = community_commitment
+    // [3] = player1_ranking (e.g., 5 = Flush)
+    // [4] = player2_ranking (e.g., 3 = Three of a Kind)
+    // [5] = winner (1 = player1)
     let mut public_signals = Vec::new(&env);
     public_signals.push_back(commitment1.clone());
     public_signals.push_back(commitment2.clone());
+    public_signals.push_back(Bytes::from_slice(&env, b"community_commitment"));
     public_signals.push_back(Bytes::from_slice(&env, &[5u8])); // player1 ranking
     public_signals.push_back(Bytes::from_slice(&env, &[3u8])); // player2 ranking
     public_signals.push_back(Bytes::from_slice(&env, &[1u8])); // winner = player1
