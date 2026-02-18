@@ -70,9 +70,25 @@ pub enum Error {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Phase {
-    Commit,    // Players submit commitments
-    Reveal,    // Players reveal cards with ZK proof
+    Commit,    // Players submit hole card commitments (2 cards each)
+    Preflop,   // First betting round (after hole cards dealt)
+    Flop,      // Second betting round (after 3 community cards)
+    Turn,      // Third betting round (after 4th community card)
+    River,     // Fourth betting round (after 5th community card)
+    Showdown,  // Reveal hands with ZK proof
     Complete,  // Game finished
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Action {
+    None,
+    Fold,
+    Check,
+    Call,
+    Bet(i128),
+    Raise(i128),
+    AllIn,
 }
 
 #[contracttype]
@@ -82,13 +98,40 @@ pub struct Game {
     pub player2: Address,
     pub player1_points: i128,
     pub player2_points: i128,
-    pub player1_commitment: Option<Bytes>,  // Poseidon hash of hand
-    pub player2_commitment: Option<Bytes>,
+    
+    // Stacks (remaining chips)
+    pub player1_stack: i128,
+    pub player2_stack: i128,
+    
+    // Current bets in this round
+    pub player1_bet: i128,
+    pub player2_bet: i128,
+    
+    // Pot
+    pub pot: i128,
+    
+    // Hole card commitments (2 cards each)
+    pub player1_hole_commitment: Option<Bytes>,  // Poseidon hash of 2 hole cards
+    pub player2_hole_commitment: Option<Bytes>,
+    
+    // Community cards commitment (5 cards)
+    pub community_commitment: Option<Bytes>,
+    
+    // Revealed community cards count (0-5)
+    pub community_revealed: u32,
+    
+    // Turn tracking
+    pub current_actor: u32,  // 0 = player1, 1 = player2
+    pub last_action: Action,
+    pub last_raise_amount: i128,
+    
+    // Showdown
     pub player1_revealed: bool,
     pub player2_revealed: bool,
     pub player1_ranking: Option<u32>,  // Hand ranking (0-9)
     pub player2_ranking: Option<u32>,
     pub winner: Option<Address>,
+    
     pub phase: Phase,
 }
 
@@ -148,8 +191,8 @@ impl PockerContract {
     /// * `session_id` - Unique session identifier (u32)
     /// * `player1` - Address of first player
     /// * `player2` - Address of second player
-    /// * `player1_points` - Points amount committed by player 1
-    /// * `player2_points` - Points amount committed by player 2
+    /// * `player1_points` - Points amount committed by player 1 (buy-in)
+    /// * `player2_points` - Points amount committed by player 2 (buy-in)
     pub fn start_game(
         env: Env,
         session_id: u32,
@@ -188,13 +231,24 @@ impl PockerContract {
         );
 
         // Create game in Commit phase
+        // Players start with their full buy-in as stack
         let game = Game {
             player1: player1.clone(),
             player2: player2.clone(),
             player1_points,
             player2_points,
-            player1_commitment: None,
-            player2_commitment: None,
+            player1_stack: player1_points,
+            player2_stack: player2_points,
+            player1_bet: 0,
+            player2_bet: 0,
+            pot: 0,
+            player1_hole_commitment: None,
+            player2_hole_commitment: None,
+            community_commitment: None,
+            community_revealed: 0,
+            current_actor: 0,  // Player 1 starts
+            last_action: Action::None,
+            last_raise_amount: 0,
             player1_revealed: false,
             player2_revealed: false,
             player1_ranking: None,
@@ -215,18 +269,18 @@ impl PockerContract {
         Ok(())
     }
 
-    /// Submit a commitment for your hand (Poseidon hash)
-    /// Players must commit before revealing
+    /// Submit a commitment for your 2 hole cards (Poseidon hash)
+    /// Players must commit before betting begins
     ///
     /// # Arguments
     /// * `session_id` - The session ID of the game
     /// * `player` - Address of the player making the commitment
-    /// * `commitment` - Poseidon hash of cards + salt
-    pub fn submit_commitment(
+    /// * `hole_commitment` - Poseidon hash of 2 hole cards + salt
+    pub fn submit_hole_commitment(
         env: Env,
         session_id: u32,
         player: Address,
-        commitment: Bytes,
+        hole_commitment: Bytes,
     ) -> Result<(), Error> {
         player.require_auth();
 
@@ -245,22 +299,23 @@ impl PockerContract {
 
         // Store commitment for the appropriate player
         if player == game.player1 {
-            if game.player1_commitment.is_some() {
+            if game.player1_hole_commitment.is_some() {
                 return Err(Error::AlreadyCommitted);
             }
-            game.player1_commitment = Some(commitment);
+            game.player1_hole_commitment = Some(hole_commitment);
         } else if player == game.player2 {
-            if game.player2_commitment.is_some() {
+            if game.player2_hole_commitment.is_some() {
                 return Err(Error::AlreadyCommitted);
             }
-            game.player2_commitment = Some(commitment);
+            game.player2_hole_commitment = Some(hole_commitment);
         } else {
             return Err(Error::NotPlayer);
         }
 
-        // If both players have committed, move to Reveal phase
-        if game.player1_commitment.is_some() && game.player2_commitment.is_some() {
-            game.phase = Phase::Reveal;
+        // If both players have committed, move to Preflop betting phase
+        if game.player1_hole_commitment.is_some() && game.player2_hole_commitment.is_some() {
+            game.phase = Phase::Preflop;
+            game.current_actor = 0;  // Player 1 acts first preflop
         }
 
         // Store updated game in temporary storage
@@ -272,8 +327,254 @@ impl PockerContract {
         Ok(())
     }
 
+    /// Submit community cards commitment (5 cards)
+    /// This should be done after hole cards are committed
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID of the game
+    /// * `community_commitment` - Poseidon hash of 5 community cards + salt
+    pub fn submit_community_commitment(
+        env: Env,
+        session_id: u32,
+        community_commitment: Bytes,
+    ) -> Result<(), Error> {
+        // Get game from temporary storage
+        let key = DataKey::Game(session_id);
+        let mut game: Game = env
+            .storage()
+            .temporary()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        // Check game is in Preflop phase or later
+        if game.phase == Phase::Commit {
+            return Err(Error::NotInPhase);
+        }
+
+        // Store community commitment
+        game.community_commitment = Some(community_commitment);
+
+        // Store updated game in temporary storage
+        env.storage().temporary().set(&key, &game);
+        env.storage()
+            .temporary()
+            .extend_ttl(&key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+
+        Ok(())
+    }
+
+    /// Execute a betting action (fold, check, call, bet, raise, all-in)
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID of the game
+    /// * `player` - Address of the player making the action
+    /// * `action` - The betting action to execute
+    pub fn player_action(
+        env: Env,
+        session_id: u32,
+        player: Address,
+        action: Action,
+    ) -> Result<(), Error> {
+        player.require_auth();
+
+        // Get game from temporary storage
+        let key = DataKey::Game(session_id);
+        let mut game: Game = env
+            .storage()
+            .temporary()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        // Check game is in a betting phase
+        if game.phase != Phase::Preflop && game.phase != Phase::Flop 
+            && game.phase != Phase::Turn && game.phase != Phase::River {
+            return Err(Error::NotInPhase);
+        }
+
+        // Check it's the player's turn
+        let is_player1 = player == game.player1;
+        let is_player2 = player == game.player2;
+        
+        if !is_player1 && !is_player2 {
+            return Err(Error::NotPlayer);
+        }
+
+        let player_index: u32 = if is_player1 { 0 } else { 1 };
+        if player_index != game.current_actor {
+            return Err(Error::NotInPhase);  // Not your turn
+        }
+
+        // Get current player's stack and bet
+        let (player_stack, player_bet, opponent_bet) = if is_player1 {
+            (game.player1_stack, game.player1_bet, game.player2_bet)
+        } else {
+            (game.player2_stack, game.player2_bet, game.player1_bet)
+        };
+
+        // Process action
+        match action {
+            Action::Fold => {
+                // Player folds - opponent wins immediately
+                let winner = if is_player1 {
+                    game.player2.clone()
+                } else {
+                    game.player1.clone()
+                };
+                
+                game.winner = Some(winner.clone());
+                game.phase = Phase::Complete;
+                
+                // Store updated game
+                env.storage().temporary().set(&key, &game);
+                env.storage()
+                    .temporary()
+                    .extend_ttl(&key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+
+                // Call GameHub to end the session
+                let game_hub_addr: Address = env
+                    .storage()
+                    .instance()
+                    .get(&DataKey::GameHubAddress)
+                    .expect("GameHub address not set");
+                let game_hub = GameHubClient::new(&env, &game_hub_addr);
+                let player1_won = winner == game.player1;
+                game_hub.end_game(&session_id, &player1_won);
+
+                return Ok(());
+            }
+            Action::Check => {
+                // Can only check if no bet to call
+                if opponent_bet > player_bet {
+                    return Err(Error::NotInPhase);
+                }
+                game.last_action = Action::Check;
+            }
+            Action::Call => {
+                // Match opponent's bet
+                let call_amount = opponent_bet - player_bet;
+                if call_amount > player_stack {
+                    return Err(Error::NotInPhase);  // Not enough chips
+                }
+                
+                if is_player1 {
+                    game.player1_stack -= call_amount;
+                    game.player1_bet += call_amount;
+                } else {
+                    game.player2_stack -= call_amount;
+                    game.player2_bet += call_amount;
+                }
+                
+                game.pot += call_amount;
+                game.last_action = Action::Call;
+            }
+            Action::Bet(amount) => {
+                // Initial bet in the round
+                if opponent_bet > 0 || player_bet > 0 {
+                    return Err(Error::NotInPhase);  // Already betting
+                }
+                if amount > player_stack {
+                    return Err(Error::NotInPhase);  // Not enough chips
+                }
+                
+                if is_player1 {
+                    game.player1_stack -= amount;
+                    game.player1_bet += amount;
+                } else {
+                    game.player2_stack -= amount;
+                    game.player2_bet += amount;
+                }
+                
+                game.pot += amount;
+                game.last_raise_amount = amount;
+                game.last_action = Action::Bet(amount);
+            }
+            Action::Raise(amount) => {
+                // Raise the bet (must be at least 2x current bet)
+                let min_raise = opponent_bet * 2;
+                if amount < min_raise || amount > player_stack {
+                    return Err(Error::NotInPhase);
+                }
+                
+                let raise_amount = amount - player_bet;
+                if is_player1 {
+                    game.player1_stack -= raise_amount;
+                    game.player1_bet += raise_amount;
+                } else {
+                    game.player2_stack -= raise_amount;
+                    game.player2_bet += raise_amount;
+                }
+                
+                game.pot += raise_amount;
+                game.last_raise_amount = amount;
+                game.last_action = Action::Raise(amount);
+            }
+            Action::AllIn => {
+                // Bet entire stack
+                if is_player1 {
+                    game.pot += game.player1_stack;
+                    game.player1_bet += game.player1_stack;
+                    game.player1_stack = 0;
+                } else {
+                    game.pot += game.player2_stack;
+                    game.player2_bet += game.player2_stack;
+                    game.player2_stack = 0;
+                }
+                game.last_action = Action::AllIn;
+            }
+            Action::None => {
+                return Err(Error::NotInPhase);
+            }
+        }
+
+        // Switch to next player
+        game.current_actor = if game.current_actor == 0 { 1 } else { 0 };
+
+        // Check if betting round is complete
+        if Self::is_betting_round_complete(&game) {
+            // Move to next phase
+            game.phase = match game.phase {
+                Phase::Preflop => Phase::Flop,
+                Phase::Flop => Phase::Turn,
+                Phase::Turn => Phase::River,
+                Phase::River => Phase::Showdown,
+                _ => game.phase,
+            };
+            
+            // Reset bets for next round
+            game.player1_bet = 0;
+            game.player2_bet = 0;
+            game.current_actor = 0;  // Player 1 acts first post-flop
+        }
+
+        // Store updated game
+        env.storage().temporary().set(&key, &game);
+        env.storage()
+            .temporary()
+            .extend_ttl(&key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+
+        Ok(())
+    }
+
+    /// Check if betting round is complete
+    fn is_betting_round_complete(game: &Game) -> bool {
+        // Round is complete if:
+        // 1. Both players have acted (last_action is not None)
+        // 2. Bets are equal
+        // 3. Or someone folded/went all-in
+        
+        if matches!(game.last_action, Action::None) {
+            return false;
+        }
+        
+        if matches!(game.last_action, Action::Fold | Action::AllIn) {
+            return true;
+        }
+        
+        game.player1_bet == game.player2_bet
+    }
+
     /// Reveal the winner using a ZK proof
-    /// Verifies that revealed cards match commitments and determines winner
+    /// Verifies that revealed hands (2 hole cards + 5 community cards) match commitments and determines winner
     ///
     /// # Arguments
     /// * `session_id` - The session ID of the game
@@ -301,25 +602,26 @@ impl PockerContract {
             return Ok(winner.clone());
         }
 
-        // Check game is in Reveal phase
-        if game.phase != Phase::Reveal {
+        // Check game is in Showdown phase
+        if game.phase != Phase::Showdown {
             return Err(Error::NotInPhase);
         }
 
-        // Check both players have committed
-        if game.player1_commitment.is_none() || game.player2_commitment.is_none() {
+        // Check both players have committed hole cards
+        if game.player1_hole_commitment.is_none() || game.player2_hole_commitment.is_none() {
             return Err(Error::NotCommitted);
         }
 
         // Verify ZK proof using Protocol 25 primitives
         // public_signals format:
-        // [0] = player1_commitment
-        // [1] = player2_commitment
-        // [2] = player1_ranking
-        // [3] = player2_ranking
-        // [4] = winner (1 = player1, 2 = player2, 0 = tie)
+        // [0] = player1_hole_commitment
+        // [1] = player2_hole_commitment
+        // [2] = community_commitment
+        // [3] = player1_ranking
+        // [4] = player2_ranking
+        // [5] = winner (1 = player1, 2 = player2, 0 = tie)
         
-        if public_signals.len() < 5 {
+        if public_signals.len() < 6 {
             return Err(Error::InvalidProof);
         }
 
@@ -327,10 +629,10 @@ impl PockerContract {
         let proof_p1_commitment = public_signals.get(0).unwrap();
         let proof_p2_commitment = public_signals.get(1).unwrap();
 
-        if proof_p1_commitment != *game.player1_commitment.as_ref().unwrap() {
+        if proof_p1_commitment != *game.player1_hole_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
-        if proof_p2_commitment != *game.player2_commitment.as_ref().unwrap() {
+        if proof_p2_commitment != *game.player2_hole_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
 
@@ -338,9 +640,9 @@ impl PockerContract {
         Self::verify_groth16_proof(&env, proof, public_signals.clone())?;
 
         // Extract rankings and winner from public signals
-        let p1_ranking = Self::bytes_to_u32(&public_signals.get(2).unwrap());
-        let p2_ranking = Self::bytes_to_u32(&public_signals.get(3).unwrap());
-        let winner_signal = Self::bytes_to_u32(&public_signals.get(4).unwrap());
+        let p1_ranking = Self::bytes_to_u32(&public_signals.get(3).unwrap());
+        let p2_ranking = Self::bytes_to_u32(&public_signals.get(4).unwrap());
+        let winner_signal = Self::bytes_to_u32(&public_signals.get(5).unwrap());
 
         game.player1_ranking = Some(p1_ranking);
         game.player2_ranking = Some(p2_ranking);
