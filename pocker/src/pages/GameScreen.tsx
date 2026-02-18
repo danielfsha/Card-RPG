@@ -187,15 +187,27 @@ export function GameScreen({ onBack }: GameScreenProps) {
       setGeneratingProof(true);
       toast.loading("Generating ZK proof... This may take a few seconds.");
       
+      // Get community cards from game state
+      const communityCards = gameState.community_cards || [];
+      if (communityCards.length !== 5) {
+        throw new Error('Community cards not fully dealt');
+      }
+      
       const opponentCards = zkService.generateRandomHand();
       const opponentSalt = zkService.generateSalt();
       const opponentCommitment = await zkService.commitHand(opponentCards, opponentSalt);
       
       const isPlayer1 = gameState.player1 === publicKey;
-      const player1Cards = isPlayer1 ? myCards : opponentCards;
+      
+      // Combine hole cards with community cards to make 7-card hand
+      // Then take best 5 cards (for now, just take first 5 from combined)
+      const myFullHand = [...myCards, ...communityCards].slice(0, 5);
+      const opponentFullHand = [...opponentCards, ...communityCards].slice(0, 5);
+      
+      const player1Cards = isPlayer1 ? myFullHand : opponentFullHand;
       const player1Salt = isPlayer1 ? mySalt! : opponentSalt;
       const player1Commitment = isPlayer1 ? myCommitment! : opponentCommitment;
-      const player2Cards = isPlayer1 ? opponentCards : myCards;
+      const player2Cards = isPlayer1 ? opponentFullHand : myFullHand;
       const player2Salt = isPlayer1 ? opponentSalt : mySalt!;
       const player2Commitment = isPlayer1 ? opponentCommitment : myCommitment!;
       
@@ -370,7 +382,13 @@ export function GameScreen({ onBack }: GameScreenProps) {
 
   const handleRaiseConfirm = async () => {
     try {
-      toast.loading(`Raising to ${betAmount} XLM...`);
+      if (!gameState) return;
+      
+      const isPlayer1 = gameState.player1 === publicKey;
+      const myBet = isPlayer1 ? gameState.player1_bet : gameState.player2_bet;
+      const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
+      
+      toast.loading(`${myBet === BigInt(0) && opponentBet === BigInt(0) ? 'Betting' : 'Raising to'} ${betAmount} XLM...`);
       
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
@@ -381,21 +399,20 @@ export function GameScreen({ onBack }: GameScreenProps) {
       // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
       const amountInStroops = BigInt(betAmount * 10000000);
       
-      // Create Raise action
-      const raiseAction = { 
-        tag: "Raise" as const, 
-        values: [amountInStroops] as const 
-      };
+      // Use Bet action if both players have 0 bets, otherwise use Raise
+      const action = myBet === BigInt(0) && opponentBet === BigInt(0)
+        ? { tag: "Bet" as const, values: [amountInStroops] as const }
+        : { tag: "Raise" as const, values: [amountInStroops] as const };
       
       await pockerService.playerAction(
         sessionId,
         publicKey!,
-        raiseAction,
+        action,
         signer
       );
       
       toast.dismiss();
-      toast.success(`Raised to ${betAmount} XLM!`);
+      toast.success(`${action.tag === "Bet" ? 'Bet' : 'Raised to'} ${betAmount} XLM!`);
       setShowRaiseSlider(false);
       
       // Reload game state

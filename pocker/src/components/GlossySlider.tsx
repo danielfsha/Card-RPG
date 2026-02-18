@@ -1,5 +1,4 @@
-
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import GlossyButton from './GlossyButton';
 
 interface GlossySliderProps {
@@ -30,48 +29,77 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const updateValue = (clientX: number) => {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+
+  const updateValue = useCallback((clientX: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    const percentage = x / rect.width;
-    const newValue = Math.round(min + percentage * (max - min));
+    const percentage = rect.width === 0 ? 0 : x / rect.width;
+    const raw = min + percentage * (max - min);
+    const newValue = clamp(Math.round(raw));
     if (newValue !== value) {
       onChange(newValue);
     }
-  };
+  }, [min, max, onChange, value]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
     setIsDragging(true);
     updateValue(e.clientX);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length > 0) {
+      setIsDragging(true);
+      updateValue(e.touches[0].clientX);
+    }
+  };
+
   useEffect(() => {
+    if (!isDragging) {
+      document.body.style.userSelect = '';
+      return;
+    }
+
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        updateValue(e.clientX);
-      }
+      updateValue(e.clientX);
     };
+
     const handleMouseUp = () => {
       setIsDragging(false);
     };
 
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = 'none';
-    } else {
-      document.body.style.userSelect = '';
-    }
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        updateValue(e.touches[0].clientX);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+    document.body.style.userSelect = 'none';
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
       document.body.style.userSelect = '';
     };
-  }, [isDragging, value]);
+  }, [isDragging, updateValue]);
 
-  const percentage = ((value - min) / (max - min)) * 100;
+  const safeValue = clamp(value);
+  const percentage = max === min 
+    ? 0 
+    : ((safeValue - min) / (max - min)) * 100;
 
   return (
     <div className={`flex items-center space-x-4 w-full select-none ${className}`}>
@@ -94,6 +122,7 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
           backgroundImage: 'linear-gradient(to bottom, rgba(255,255,255,0.1), transparent 50%, rgba(0,0,0,0.2))'
         }}
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
       >
         {/* Fill Track */}
         <div 
@@ -117,10 +146,12 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
           <div 
             className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-white rounded-md border border-black px-4 py-1 flex flex-col items-center justify-center shadow-xl min-w-[120px] pointer-events-none"
           >
-            <span className="text-black text-lg leading-tight font-bold">{`${formatValue(value)} XLM`}</span>
+            <span className="text-black text-lg leading-tight font-bold">
+              {`${formatValue(safeValue)} XLM`}
+            </span>
             {/* Tooltip Tail */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black">
-               <div className="absolute -top-[7px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-white" />
+              <div className="absolute -top-[7px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-white" />
             </div>
           </div>
         </div>
@@ -131,7 +162,9 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
         <GlossyButton 
           onClick={onOkClick}
         >
-          <span className="text-white text-xl drop-shadow-[0_1px_1px_rgba(0,0,0,1)] font-bold">OK</span>
+          <span className="text-white text-xl drop-shadow-[0_1px_1px_rgba(0,0,0,1)] font-bold">
+            OK
+          </span>
         </GlossyButton>
       )}
     </div>
@@ -139,4 +172,3 @@ const GlossySlider: React.FC<GlossySliderProps> = ({
 };
 
 export default GlossySlider;
-
