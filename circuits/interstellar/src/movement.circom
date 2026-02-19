@@ -107,12 +107,15 @@ template Movement() {
     new_commitment_check.in[0] <== new_poseidon.out;
     new_commitment_check.in[1] <== new_position_commitment;
     
-    // All checks must pass
-    is_valid <== old_commitment_check.out * distance_check.out *
-                 new_x_min.out * new_x_max.out *
-                 new_y_min.out * new_y_max.out *
-                 new_z_min.out * new_z_max.out *
-                 new_commitment_check.out;
+    // All checks must pass (break down to avoid non-quadratic constraints)
+    signal check1 <== old_commitment_check.out * distance_check.out;
+    signal check2 <== check1 * new_x_min.out;
+    signal check3 <== check2 * new_x_max.out;
+    signal check4 <== check3 * new_y_min.out;
+    signal check5 <== check4 * new_y_max.out;
+    signal check6 <== check5 * new_z_min.out;
+    signal check7 <== check6 * new_z_max.out;
+    is_valid <== check7 * new_commitment_check.out;
 }
 
 component main = Movement();

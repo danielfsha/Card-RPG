@@ -12,6 +12,7 @@
     "compile:win": "circom src/win_condition.circom --r1cs --wasm --sym -o build",
     "compile:all": "npm run compile:spawn && npm run compile:movement && npm run compile:shooting && npm run compile:damage && npm run compile:item && npm run compile:win",
     "setup": "node scripts/setup.js",
+    "setup:all": "node scripts/setup-all.js",
     "test": "node scripts/test.js",
     "test:spawn": "node test/spawn.test.js",
     "test:movement": "node test/movement.test.js",
@@ -21,7 +22,7 @@
     "test:win": "node test/win_condition.test.js",
     "test:all": "npm run test:spawn && npm run test:movement && npm run test:shooting && npm run test:damage && npm run test:item && npm run test:win",
     "generate-proof": "node scripts/generate_proof.js",
-    "copy-artifacts": "mkdir -p ../../interstellar-game/public/circuits && cp build/shooting_js/shooting.wasm ../../interstellar-game/public/circuits/ && cp shooting_final.zkey ../../interstellar-game/public/circuits/",
+    "copy-artifacts": "node scripts/copy-artifacts.js",
     "info": "snarkjs r1cs info build/shooting.r1cs",
     "clean": "rm -rf build node_modules *.ptau *.zkey *.sol verification_key.json proof.json"
   },

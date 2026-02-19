@@ -119,10 +119,11 @@ template Shooting() {
     signal to_target_y <== target_y - shooter_y;
     signal to_target_z <== target_z - shooter_z;
     
-    // Dot product: direction · to_target
-    signal dot_product <== dir_x * to_target_x + 
-                          dir_y * to_target_y + 
-                          dir_z * to_target_z;
+    // Dot product: direction · to_target (break down multiplications)
+    signal dot_x <== dir_x * to_target_x;
+    signal dot_y <== dir_y * to_target_y;
+    signal dot_z <== dir_z * to_target_z;
+    signal dot_product <== dot_x + dot_y + dot_z;
     
     // Check if target is in front of shooter (dot product > 0)
     component forward_check = GreaterThan(32);

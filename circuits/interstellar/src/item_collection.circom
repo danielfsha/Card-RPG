@@ -141,11 +141,14 @@ template ItemCollection() {
     new_inv_check.in[0] <== new_inv_poseidon.out;
     new_inv_check.in[1] <== new_inventory_commitment;
     
-    // All checks must pass
-    is_valid <== pos_check.out * distance_check.out *
-                 old_inv_check.out * new_inv_check.out *
-                 health_check.out * ammo_check.out *
-                 weapon_check.out * powerup_check.out;
+    // All checks must pass (break down to avoid non-quadratic constraints)
+    signal check1 <== pos_check.out * distance_check.out;
+    signal check2 <== check1 * old_inv_check.out;
+    signal check3 <== check2 * new_inv_check.out;
+    signal check4 <== check3 * health_check.out;
+    signal check5 <== check4 * ammo_check.out;
+    signal check6 <== check5 * weapon_check.out;
+    is_valid <== check6 * powerup_check.out;
 }
 
 component main = ItemCollection();

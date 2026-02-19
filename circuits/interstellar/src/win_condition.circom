@@ -101,10 +101,15 @@ template WinCondition() {
     p2_alive.in <== player2_health;
     signal p2_dead <== p2_alive.out;
     
-    // Tiebreaker: if equal kills, survivor wins
-    signal tie_p1_wins <== equal_kills.out * (1 - p1_dead) * p2_dead;
-    signal tie_p2_wins <== equal_kills.out * p1_dead * (1 - p2_dead);
-    signal true_tie <== equal_kills.out * (1 - p1_dead) * (1 - p2_dead);
+    // Tiebreaker: if equal kills, survivor wins (break down multiplications)
+    signal eq_not_p1_dead <== equal_kills.out * (1 - p1_dead);
+    signal tie_p1_wins <== eq_not_p1_dead * p2_dead;
+    
+    signal eq_p1_dead <== equal_kills.out * p1_dead;
+    signal tie_p2_wins <== eq_p1_dead * (1 - p2_dead);
+    
+    signal eq_not_p1 <== equal_kills.out * (1 - p1_dead);
+    signal true_tie <== eq_not_p1 * (1 - p2_dead);
     
     // Final winner determination
     signal p1_wins <== p1_more_kills.out + tie_p1_wins;
@@ -112,10 +117,12 @@ template WinCondition() {
     
     winner <== p1_wins * 1 + p2_wins * 2 + true_tie * 0;
     
-    // All checks must pass
-    is_valid <== commitment_check.out * kills_deaths_check.out *
-                 p1_health_min.out * p1_health_max.out *
-                 p2_health_min.out * p2_health_max.out;
+    // All checks must pass (break down multiplications)
+    signal check1 <== commitment_check.out * kills_deaths_check.out;
+    signal check2 <== p1_health_min.out * p1_health_max.out;
+    signal check3 <== p2_health_min.out * p2_health_max.out;
+    signal check4 <== check1 * check2;
+    is_valid <== check4 * check3;
 }
 
 component main = WinCondition();

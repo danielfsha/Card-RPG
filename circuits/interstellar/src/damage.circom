@@ -79,9 +79,11 @@ template Damage() {
     death_check.in <== new_health;
     is_dead <== death_check.out;
     
-    // All checks must pass
-    is_valid <== old_check.out * old_health_min.out * old_health_max.out *
-                 new_health_check.out * new_check.out;
+    // All checks must pass (break down to avoid non-quadratic constraints)
+    signal check1 <== old_check.out * old_health_min.out;
+    signal check2 <== check1 * old_health_max.out;
+    signal check3 <== check2 * new_health_check.out;
+    is_valid <== check3 * new_check.out;
 }
 
 component main = Damage();
