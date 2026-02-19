@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Bebas+Neue&family=Roboto:wght@400;500;700&family=Roboto+Slab:wght@700&display=swap" rel="stylesheet">
+    <title>Poker</title>
+    <script>
+      // Polyfill global and process for circomlibjs compatibility
+      window.global = window;
+      window.process = { env: {} };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/game-studio-config.js?v=20260218191300"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

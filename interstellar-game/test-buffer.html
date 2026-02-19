@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Buffer Polyfill Test</title>
+  <script>
+    // Polyfill global and process
+    window.global = window;
+    window.process = { env: {} };
+  </script>
+  <script type="module">
+    import { Buffer } from 'buffer';
+    
+    // Make Buffer available globally
+    window.Buffer = Buffer;
+    
+    // Test Buffer
+    console.log('Testing Buffer...');
+    const buf = Buffer.from('hello world', 'utf-8');
+    console.log('Buffer test:', buf.toString('hex'));
+    
+    // Test circomlibjs
+    console.log('Testing circomlibjs...');
+    import('circomlibjs').then(async (circomlibjs) => {
+      console.log('circomlibjs loaded:', circomlibjs);
+      const poseidon = await circomlibjs.buildPoseidon();
+      console.log('Poseidon initialized:', poseidon);
+      
+      const hash = poseidon([1n, 2n, 3n]);
+      const hashStr = poseidon.F.toString(hash);
+      console.log('Poseidon hash test:', hashStr);
+      
+      document.getElementById('result').innerHTML = `
+        <div style="color: green; font-size: 20px; margin: 20px;">
+          ✅ All tests passed!<br>
+          Buffer: OK<br>
+          circomlibjs: OK<br>
+          Poseidon hash: ${hashStr.substring(0, 20)}...
+        </div>
+      `;
+    }).catch(err => {
+      console.error('Error:', err);
+      document.getElementById('result').innerHTML = `
+        <div style="color: red; font-size: 20px; margin: 20px;">
+          ❌ Test failed:<br>
+          ${err.message}
+        </div>
+      `;
+    });
+  </script>
+</head>
+<body>
+  <h1>Buffer Polyfill Test</h1>
+  <div id="result">Testing...</div>
+</body>
+</html>
