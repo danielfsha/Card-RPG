@@ -19,9 +19,14 @@ const vel = new Vector3();
 
 interface CharacterControllerProps {
   controls?: any; // PlayroomKit Joystick controls (optional)
+  userPlayer?: boolean; // Is this the current user's player
+  playerState?: any; // Player state from PlayroomKit
+  onFire?: (bullet: any) => void; // Callback when firing
+  onKilled?: (victim: string, killer: string) => void; // Callback when killed
 }
 
-export const CharacterController = forwardRef<any, CharacterControllerProps>(({ controls }, ref) => {
+export const CharacterController = forwardRef<any, CharacterControllerProps>(
+  ({ controls, userPlayer = false, playerState, onFire, onKilled }, ref) => {
   const { CHARACTER } = useControls("Character Control", {
     CHARACTER: {
       value: 'Astronaut_FinnTheFrog' as CharacterType,
@@ -45,6 +50,10 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(({ 
   const landed = useRef(false);
   const cameraPosition = useRef<any>(null);
   const cameraLookAt = useRef<Vector3 | null>(null);
+  const isJumping = useRef(false);
+
+  // Check if current character is a Mech
+  const isMech = CHARACTER.startsWith('Mech_');
 
   useFrame(({ camera }) => {
     if (!rb.current) return;
@@ -102,33 +111,61 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(({ 
     const eulerRot = euler().setFromQuaternion(quat(rb.current.rotation()));
     vel.applyEuler(eulerRot);
     
-    if ((get().jump || controls?.isPressed("Jump")) && !inTheAir.current && landed.current) {
-      vel.y += JUMP_FORCE;
-      inTheAir.current = true;
-      landed.current = false;
+    // Handle jump differently for Mechs vs Astronauts
+    if (isMech) {
+      // Mechs: Animation-based jump (no physics)
+      if ((get().jump || controls?.isPressed("Jump")) && !isJumping.current) {
+        isJumping.current = true;
+        setAnimation("Jump");
+        // Reset jump after animation duration (~1 second)
+        setTimeout(() => {
+          isJumping.current = false;
+        }, 1000);
+      }
+      vel.y = curVel.y; // Keep current velocity
     } else {
-      vel.y = curVel.y;
-    }
-    
-    if (Math.abs(vel.y) > 1) {
-      inTheAir.current = true;
-      landed.current = false;
-    } else {
-      inTheAir.current = false;
+      // Astronauts: Physics-based jump
+      if ((get().jump || controls?.isPressed("Jump")) && !inTheAir.current && landed.current) {
+        vel.y += JUMP_FORCE;
+        inTheAir.current = true;
+        landed.current = false;
+      } else {
+        vel.y = curVel.y;
+      }
+      
+      if (Math.abs(vel.y) > 1) {
+        inTheAir.current = true;
+        landed.current = false;
+      } else {
+        inTheAir.current = false;
+      }
     }
     
     rb.current.setLinvel(vel, true);
 
     // ANIMATION
     const movement = Math.abs(vel.x) + Math.abs(vel.z);
-    if (inTheAir.current && vel.y > 2) {
-      setAnimation("Jump");
-    } else if (inTheAir.current && vel.y < -5) {
-      setAnimation("Jump");
-    } else if (movement > 1 || inTheAir.current) {
-      setAnimation("Run");
+    
+    if (isMech) {
+      // Mechs: Simple animation logic (Jump is handled separately)
+      if (!isJumping.current) {
+        if (movement > 1) {
+          setAnimation("Run");
+        } else {
+          setAnimation("Idle");
+        }
+      }
     } else {
-      setAnimation("Idle");
+      // Astronauts: Physics-based animation
+      if (inTheAir.current && vel.y > 2) {
+        setAnimation("Jump");
+      } else if (inTheAir.current && vel.y < -5) {
+        setAnimation("Jump");
+      } else if (movement > 1 || inTheAir.current) {
+        setAnimation("Run");
+      } else {
+        setAnimation("Idle");
+      }
     }
   });
 

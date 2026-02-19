@@ -1,15 +1,27 @@
 import { Environment, KeyboardControls, OrthographicCamera } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { CharacterController } from "./characters/CharacterController";
-import { useRef } from "react";
-import { Physics, RigidBody } from "@react-three/rapier";
+import { Physics } from "@react-three/rapier";
+import { Map } from "./map";
+import { useGameEngine } from "../hooks/useGameEngine";
+import { Bullet } from "./Bullet";
+import { BulletHit } from "./BulletHit";
 
 export interface ExperienceProps {}
 
 const Experience = (_props: ExperienceProps) => {
-  const shadowCameraRef = useRef(null);
-  const characterRef = useRef<any>(null);
-  
+  const {
+    players,
+    bullets,
+    hits,
+    gameStarted,
+    myPlayer,
+    onFire,
+    onHit,
+    onHitEnded,
+    onKilled,
+  } = useGameEngine();
+
   const keyboardMap = [
     { name: "forward", keys: ["ArrowUp", "KeyW"] },
     { name: "backward", keys: ["ArrowDown", "KeyS"] },
@@ -19,6 +31,14 @@ const Experience = (_props: ExperienceProps) => {
     { name: "jump", keys: ["Space"] },
   ];
 
+  if (!gameStarted) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-gradient-to-b from-blue-900 to-purple-900">
+        <div className="text-white text-2xl">Loading game...</div>
+      </div>
+    );
+  }
+
   return (
     <>
       <KeyboardControls map={keyboardMap}>
@@ -27,7 +47,7 @@ const Experience = (_props: ExperienceProps) => {
           shadows
           camera={{ position: [0, 5, -8], fov: 50 }}
         >
-          <Environment preset="dawn"/>
+          <Environment preset="sunset"/>
           <directionalLight
             intensity={0.65}
             castShadow
@@ -41,19 +61,35 @@ const Experience = (_props: ExperienceProps) => {
               right={15}
               top={100}
               bottom={-20}
-              ref={shadowCameraRef}
               attach={"shadow-camera"}
             />
           </directionalLight>
           <Physics>
-            <CharacterController ref={characterRef} />
-            {/* Ground plane with physics collider */}
-            <RigidBody type="fixed" colliders="cuboid">
-              <mesh receiveShadow position={[0, 0, 0]} rotation-x={-Math.PI / 2}>
-                <planeGeometry args={[50, 50]} />
-                <meshStandardMaterial color="#3a8c3a" />
-              </mesh>
-            </RigidBody>
+            <Map />
+            {players.map(({ state, joystick }) => (
+              <CharacterController
+                key={state.id}
+                controls={joystick}
+                userPlayer={state.id === myPlayer?.id}
+                playerState={state}
+                onFire={onFire}
+                onKilled={onKilled}
+              />
+            ))}
+            {bullets.map((bullet) => (
+              <Bullet
+                key={bullet.id}
+                {...bullet}
+                onHit={(position) => onHit(bullet.id, position)}
+              />
+            ))}
+            {hits.map((hit) => (
+              <BulletHit
+                key={hit.id}
+                {...hit}
+                onEnded={() => onHitEnded(hit.id)}
+              />
+            ))}
           </Physics>
         </Canvas>
       </KeyboardControls>
