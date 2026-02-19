@@ -29,6 +29,7 @@ const Experience = (_props: ExperienceProps) => {
     { name: "right", keys: ["ArrowRight", "KeyD"] },
     { name: "run", keys: ["Shift"] },
     { name: "jump", keys: ["Space"] },
+    { name: "fire", keys: ["Mouse0"] }, // Left mouse button for firing
   ];
 
   if (!gameStarted) {

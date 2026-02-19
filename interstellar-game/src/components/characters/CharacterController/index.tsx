@@ -15,6 +15,7 @@ import { Character, type CharacterType } from "./Character";
 const MOVEMENT_SPEED = 4.2;
 const JUMP_FORCE = 8;
 const ROTATION_SPEED = 2.5;
+const FIRE_COOLDOWN = 300; // milliseconds between shots
 const vel = new Vector3();
 
 interface CharacterControllerProps {
@@ -51,9 +52,14 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(
   const cameraPosition = useRef<any>(null);
   const cameraLookAt = useRef<Vector3 | null>(null);
   const isJumping = useRef(false);
+  const lastFireTime = useRef(0);
+  const isFiring = useRef(false);
 
+  // Get character from playerState if available, otherwise use Leva control
+  const currentCharacter = playerState?.getState?.("character") || CHARACTER;
+  
   // Check if current character is a Mech
-  const isMech = CHARACTER.startsWith('Mech_');
+  const isMech = currentCharacter.startsWith('Mech_');
 
   useFrame(({ camera }) => {
     if (!rb.current) return;
@@ -143,6 +149,44 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(
     
     rb.current.setLinvel(vel, true);
 
+    // SHOOTING LOGIC
+    const now = Date.now();
+    const canFire = now - lastFireTime.current > FIRE_COOLDOWN;
+    
+    // Check for fire input (mouse click or fire button)
+    const firePressed = controls?.isPressed("fire") || get().fire;
+    
+    if (firePressed && canFire && !isFiring.current && userPlayer && onFire) {
+      isFiring.current = true;
+      lastFireTime.current = now;
+      
+      // Get player position and rotation
+      const position = vec3(rb.current.translation());
+      const rotation = euler().setFromQuaternion(quat(rb.current.rotation()));
+      
+      // Create bullet slightly in front of player
+      const bulletOffset = new Vector3(0, 1, 0.5);
+      bulletOffset.applyEuler(rotation);
+      
+      const bullet = {
+        id: `${playerState?.id || 'local'}-${now}`,
+        position: [
+          position.x + bulletOffset.x,
+          position.y + bulletOffset.y,
+          position.z + bulletOffset.z,
+        ] as [number, number, number],
+        angle: rotation.y,
+        player: playerState?.id || 'local',
+      };
+      
+      onFire(bullet);
+      
+      // Reset firing flag after a short delay
+      setTimeout(() => {
+        isFiring.current = false;
+      }, 100);
+    }
+
     // ANIMATION
     const movement = Math.abs(vel.x) + Math.abs(vel.z);
     
@@ -181,6 +225,7 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(
 
   return (
     <RigidBody
+      name={playerState?.id || 'local'}
       position={[0, 6, 1]}
       colliders={false}
       canSleep={false}
@@ -197,7 +242,7 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(
     >
       <group ref={cameraPosition} position={[-1.5, 1.5, -3]} />
       <Character
-        character={CHARACTER}
+        character={currentCharacter}
         scale={0.42}
         position-y={0.34}
         animation={animation}
