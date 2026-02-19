@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { getRuntimeConfig } from '../utils/runtimeConfig';
-import { POCKER_CONTRACT, RPC_URL, NETWORK_PASSPHRASE } from '../utils/constants';
+import { INTERSTELLAR_CONTRACT, RPC_URL, NETWORK_PASSPHRASE } from '../utils/constants';
 
 export function ConfigDebug() {
   const [runtimeConfig, setRuntimeConfig] = useState<any>(null);
@@ -18,7 +18,7 @@ export function ConfigDebug() {
 
     // Get environment variables
     setEnvVars({
-      VITE_POCKER_CONTRACT_ID: import.meta.env.VITE_POCKER_CONTRACT_ID,
+      VITE_INTERSTELLAR_CONTRACT_ID: import.meta.env.VITE_INTERSTELLAR_CONTRACT_ID,
       VITE_SOROBAN_RPC_URL: import.meta.env.VITE_SOROBAN_RPC_URL,
       VITE_NETWORK_PASSPHRASE: import.meta.env.VITE_NETWORK_PASSPHRASE,
     });
@@ -45,7 +45,7 @@ export function ConfigDebug() {
       </div>
       
       <div style={{ marginBottom: '5px' }}>
-        <strong>Active Contract ID:</strong> {POCKER_CONTRACT || '❌ NOT SET'}
+        <strong>Active Contract ID:</strong> {INTERSTELLAR_CONTRACT || '❌ NOT SET'}
       </div>
       
       <div style={{ marginBottom: '5px' }}>
@@ -71,7 +71,7 @@ export function ConfigDebug() {
       </div>
 
       <div style={{ marginTop: '10px', color: '#ff0', fontSize: '10px' }}>
-        ⚠️ Expected Contract ID: CBVHGAN3B75DWRX5ZQ4I4EH5FOYOD745Y47OAYLVNPB2JJTMUDO7LAQ5
+        ⚠️ Expected Contract ID: CAVPIBZJJK3673HHXINEV2AVU2VIW7IKT6H4UNTLSCOX7RFD7X2USQPX
       </div>
     </div>
   );

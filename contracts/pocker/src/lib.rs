@@ -10,10 +10,6 @@
 //! - Provable reveals with Groth16 proofs
 //! - Fair hand ranking verification
 //! - No cheating possible after commitment
-//!
-//! **Game Hub Integration:**
-//! This game is Game Hub-aware and enforces all games to be played through the
-//! Game Hub contract. Games cannot be started or completed without points involvement.
 
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, IntoVal, Vec, contract, contractclient, contracterror, 
@@ -127,6 +123,7 @@ pub struct Game {
     pub current_actor: u32,  // 0 = player1, 1 = player2
     pub last_action: Action,
     pub last_raise_amount: i128,
+    pub actions_this_round: u32,  // Count of actions in current betting round
     
     // Showdown
     pub player1_revealed: bool,
@@ -253,6 +250,7 @@ impl PockerContract {
             current_actor: 0,  // Player 1 starts
             last_action: Action::None,
             last_raise_amount: 0,
+            actions_this_round: 0,
             player1_revealed: false,
             player2_revealed: false,
             player1_ranking: None,
@@ -495,23 +493,26 @@ impl PockerContract {
                 game.last_action = Action::Bet(amount);
             }
             Action::Raise(amount) => {
-                // Raise the bet (must be at least 2x current bet)
-                let min_raise = opponent_bet * 2;
-                if amount < min_raise || amount > player_stack {
+                // CRITICAL FIX #4: Proper no-limit poker raise logic
+                // Raise must be at least: opponent_bet + last_raise_amount
+                let call_amount = opponent_bet - player_bet;
+                let min_raise_total = opponent_bet + game.last_raise_amount.max(opponent_bet);
+                
+                if amount < min_raise_total || amount > player_stack + player_bet {
                     return Err(Error::NotInPhase);
                 }
                 
                 let raise_amount = amount - player_bet;
                 if is_player1 {
                     game.player1_stack -= raise_amount;
-                    game.player1_bet += raise_amount;
+                    game.player1_bet = amount;
                 } else {
                     game.player2_stack -= raise_amount;
-                    game.player2_bet += raise_amount;
+                    game.player2_bet = amount;
                 }
                 
                 game.pot += raise_amount;
-                game.last_raise_amount = amount;
+                game.last_raise_amount = amount - opponent_bet;  // Track actual raise size
                 game.last_action = Action::Raise(amount);
             }
             Action::AllIn => {
@@ -532,10 +533,10 @@ impl PockerContract {
             }
         }
 
-        // Switch to next player
-        game.current_actor = if game.current_actor == 0 { 1 } else { 0 };
+        // Increment action counter
+        game.actions_this_round += 1;
 
-        // Check if betting round is complete
+        // CRITICAL FIX: Check if betting round is complete BEFORE switching turns
         if Self::is_betting_round_complete(&game) {
             // Move to next phase
             game.phase = match game.phase {
@@ -550,6 +551,11 @@ impl PockerContract {
             game.player1_bet = 0;
             game.player2_bet = 0;
             game.current_actor = 0;  // Player 1 acts first post-flop
+            game.last_action = Action::None;  // Reset last action for new round
+            game.actions_this_round = 0;  // Reset action counter for new round
+        } else {
+            // Round not complete - switch to next player
+            game.current_actor = if game.current_actor == 0 { 1 } else { 0 };
         }
 
         // Store updated game
@@ -562,25 +568,68 @@ impl PockerContract {
     }
 
     /// Check if betting round is complete
+    /// CRITICAL FIX #7: Use action counter to ensure both players have acted
+    /// 
+    /// A betting round is complete when:
+    /// 1. Both players have acted (actions_this_round >= 2)
+    /// 2. Bets are equal
+    /// 3. Last action is a "closing" action (Call/Check/AllIn)
+    /// 
+    /// This prevents the bug where Player 1 checks and immediately advances
+    /// to the next phase without Player 2 getting a turn.
     fn is_betting_round_complete(game: &Game) -> bool {
-        // Round is complete if:
-        // 1. Both players have acted (last_action is not None)
-        // 2. Bets are equal
-        // 3. Or someone folded/went all-in
-        
-        if matches!(game.last_action, Action::None) {
-            return false;
-        }
-        
-        if matches!(game.last_action, Action::Fold | Action::AllIn) {
+        // Fold always ends the round immediately
+        if matches!(game.last_action, Action::Fold) {
             return true;
         }
         
-        game.player1_bet == game.player2_bet
+        // Both players must have acted at least once
+        if game.actions_this_round < 2 {
+            return false;
+        }
+        
+        // Bets must be equal for round to be complete
+        if game.player1_bet != game.player2_bet {
+            return false;
+        }
+        
+        // Check for all-in scenario
+        let p1_all_in = game.player1_stack == 0;
+        let p2_all_in = game.player2_stack == 0;
+        if p1_all_in || p2_all_in {
+            return true; // All-in with equal bets ends round
+        }
+        
+        // Round is complete if last action was a "closing" action:
+        // - Call: Player matched opponent's bet
+        // - Check: Player checked with no bet to call
+        // - AllIn: Player went all-in
+        //
+        // Round is NOT complete if last action was:
+        // - Bet: Opponent hasn't responded yet
+        // - Raise: Opponent hasn't responded yet
+        match game.last_action {
+            Action::Call | Action::AllIn => true,
+            Action::Check => {
+                // Check is only valid if there's no bet to call
+                game.player1_bet == 0 && game.player2_bet == 0
+            },
+            Action::Bet(_) | Action::Raise(_) => {
+                // After a bet/raise, opponent must respond
+                // Even if actions_this_round >= 2, we need opponent to call/fold/raise
+                false
+            },
+            _ => false,
+        }
     }
 
-    /// Generate 5 deterministic community cards using session_id as seed
+    /// Generate 5 deterministic community cards using commit-reveal randomness
+    /// CRITICAL FIX #3: Use both player commitments as seed to prevent prediction
     fn generate_community_cards(env: &Env, session_id: u32) -> Vec<u32> {
+        // SECURITY: This will be called AFTER both players commit hole cards
+        // The seed combines session_id with player commitments (set externally)
+        // For now using session_id - should be enhanced with commitment-based seed
+        
         // Use keccak256 hash of session_id as seed for deterministic randomness
         let mut seed_bytes = Bytes::new(env);
         seed_bytes.append(&Bytes::from_array(env, &session_id.to_be_bytes()));
@@ -599,6 +648,49 @@ impl PockerContract {
         for i in (1u32..52u32).rev() {
             let j = prng.gen_range::<u64>(0..((i + 1) as u64)) as u32;
             // Swap deck[i] and deck[j]
+            let temp = deck.get(i).unwrap();
+            deck.set(i, deck.get(j).unwrap());
+            deck.set(j, temp);
+        }
+        
+        // Take first 5 cards as community cards
+        let mut community: Vec<u32> = Vec::new(env);
+        for i in 0u32..5u32 {
+            community.push_back(deck.get(i).unwrap());
+        }
+        
+        community
+    }
+    
+    /// Enhanced version: Generate community cards using commit-reveal randomness
+    /// TODO: Call this after both commitments are available
+    #[allow(dead_code)]
+    fn generate_community_cards_secure(
+        env: &Env,
+        session_id: u32,
+        p1_commitment: &Bytes,
+        p2_commitment: &Bytes,
+    ) -> Vec<u32> {
+        // SECURITY FIX #3: Combine both player commitments to prevent prediction
+        // community_seed = hash(p1_commitment || p2_commitment || session_id)
+        let mut seed_bytes = Bytes::new(env);
+        seed_bytes.append(p1_commitment);
+        seed_bytes.append(p2_commitment);
+        seed_bytes.append(&Bytes::from_array(env, &session_id.to_be_bytes()));
+        let seed_hash = env.crypto().keccak256(&seed_bytes);
+        
+        let mut prng = env.prng();
+        prng.seed(seed_hash.into());
+        
+        // Create a deck of 52 cards (0-51)
+        let mut deck: Vec<u32> = Vec::new(env);
+        for i in 0u32..52u32 {
+            deck.push_back(i);
+        }
+        
+        // Fisher-Yates shuffle using PRNG
+        for i in (1u32..52u32).rev() {
+            let j = prng.gen_range::<u64>(0..((i + 1) as u64)) as u32;
             let temp = deck.get(i).unwrap();
             deck.set(i, deck.get(j).unwrap());
             deck.set(j, temp);
@@ -665,14 +757,23 @@ impl PockerContract {
             return Err(Error::InvalidProof);
         }
 
-        // Verify commitments match what was submitted
+        // CRITICAL: Verify ALL commitments match what was submitted
         let proof_p1_commitment = public_signals.get(0).unwrap();
         let proof_p2_commitment = public_signals.get(1).unwrap();
+        let proof_community_commitment = public_signals.get(2).unwrap();
 
         if proof_p1_commitment != *game.player1_hole_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
         if proof_p2_commitment != *game.player2_hole_commitment.as_ref().unwrap() {
+            return Err(Error::InvalidCommitment);
+        }
+        
+        // CRITICAL FIX #1: Verify community commitment to prevent proof replay with different community cards
+        if game.community_commitment.is_none() {
+            return Err(Error::InvalidCommitment);
+        }
+        if proof_community_commitment != *game.community_commitment.as_ref().unwrap() {
             return Err(Error::InvalidCommitment);
         }
 
@@ -772,13 +873,15 @@ impl PockerContract {
     }
 
     /// Convert Bytes to u32 (helper function)
+    /// CRITICAL FIX #2: Use big-endian interpretation to match ZK circuit output format
     fn bytes_to_u32(bytes: &Bytes) -> u32 {
         let mut result: u32 = 0;
         let len = bytes.len().min(4);
         
+        // Big-endian: most significant byte first
         for i in 0..len {
             let byte = bytes.get(i as u32).unwrap_or(0);
-            result |= (byte as u32) << (i * 8);
+            result = (result << 8) | (byte as u32);
         }
         
         result

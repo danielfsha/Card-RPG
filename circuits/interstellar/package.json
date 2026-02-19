@@ -1,0 +1,37 @@
+{
+  "name": "interstellar-zk-circuits",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge circuits for Interstellar shooter game on Stellar",
+  "scripts": {
+    "build": "bash build.sh",
+    "compile:spawn": "circom src/spawn.circom --r1cs --wasm --sym -o build",
+    "compile:movement": "circom src/movement.circom --r1cs --wasm --sym -o build",
+    "compile:shooting": "circom src/shooting.circom --r1cs --wasm --sym -o build",
+    "compile:damage": "circom src/damage.circom --r1cs --wasm --sym -o build",
+    "compile:item": "circom src/item_collection.circom --r1cs --wasm --sym -o build",
+    "compile:win": "circom src/win_condition.circom --r1cs --wasm --sym -o build",
+    "compile:all": "npm run compile:spawn && npm run compile:movement && npm run compile:shooting && npm run compile:damage && npm run compile:item && npm run compile:win",
+    "setup": "node scripts/setup.js",
+    "test": "node scripts/test.js",
+    "test:spawn": "node test/spawn.test.js",
+    "test:movement": "node test/movement.test.js",
+    "test:shooting": "node test/shooting.test.js",
+    "test:damage": "node test/damage.test.js",
+    "test:item": "node test/item_collection.test.js",
+    "test:win": "node test/win_condition.test.js",
+    "test:all": "npm run test:spawn && npm run test:movement && npm run test:shooting && npm run test:damage && npm run test:item && npm run test:win",
+    "generate-proof": "node scripts/generate_proof.js",
+    "copy-artifacts": "mkdir -p ../../interstellar-game/public/circuits && cp build/shooting_js/shooting.wasm ../../interstellar-game/public/circuits/ && cp shooting_final.zkey ../../interstellar-game/public/circuits/",
+    "info": "snarkjs r1cs info build/shooting.r1cs",
+    "clean": "rm -rf build node_modules *.ptau *.zkey *.sol verification_key.json proof.json"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "snarkjs": "^0.7.4"
+  },
+  "devDependencies": {
+    "@types/circomlibjs": "^0.1.6",
+    "@types/snarkjs": "^0.7.9",
+    "circomlib": "^2.0.5"
+  }
+}

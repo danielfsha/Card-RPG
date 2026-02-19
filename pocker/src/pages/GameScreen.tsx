@@ -183,6 +183,20 @@ export function GameScreen({ onBack }: GameScreenProps) {
     if (isRevealing || generatingProof) return; // Prevent spam
     
     try {
+      console.log('[handleReveal] Current game state:', {
+        phase: gameState?.phase,
+        current_actor: gameState?.current_actor,
+        player1_bet: gameState?.player1_bet,
+        player2_bet: gameState?.player2_bet,
+        last_action: gameState?.last_action,
+        actions_this_round: gameState?.actions_this_round
+      });
+      
+      if (gameState?.phase?.tag !== 'Showdown') {
+        toast.error(`Cannot reveal winner yet. Current phase: ${gameState?.phase?.tag || 'Unknown'}. Must complete all betting rounds first.`);
+        return;
+      }
+      
       setIsRevealing(true);
       setGeneratingProof(true);
       toast.loading("Generating ZK proof... This may take a few seconds.");
@@ -363,12 +377,22 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const handleRaise = () => {
     if (!gameState) return;
     
-    // Calculate opponent's bet from game state
+    // Calculate min raise using proper no-limit poker logic
     const isPlayer1 = gameState.player1 === publicKey;
+    const myBet = isPlayer1 ? gameState.player1_bet : gameState.player2_bet;
     const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
+    const lastRaiseAmount = gameState.last_raise_amount || BigInt(0);
     
-    // Set betAmount to minBet when opening slider
-    const minRaiseStroops = opponentBet > 0 ? opponentBet * BigInt(2) : BigInt(10000000);
+    let minRaiseStroops: bigint;
+    if (myBet === BigInt(0) && opponentBet === BigInt(0)) {
+      // No bets yet - initial bet minimum is 1 XLM
+      minRaiseStroops = BigInt(10000000);
+    } else {
+      // There's a bet to raise - min raise is opponent_bet + max(last_raise_amount, opponent_bet)
+      const minRaiseIncrement = lastRaiseAmount > BigInt(0) ? lastRaiseAmount : opponentBet;
+      minRaiseStroops = opponentBet + minRaiseIncrement;
+    }
+    
     const minBetValue = Number(minRaiseStroops) / 10000000;
     setBetAmount(minBetValue);
     setShowRaiseSlider(true);
@@ -382,7 +406,15 @@ export function GameScreen({ onBack }: GameScreenProps) {
       const myBet = isPlayer1 ? gameState.player1_bet : gameState.player2_bet;
       const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
       
-      toast.loading(`${myBet === BigInt(0) && opponentBet === BigInt(0) ? 'Betting' : 'Raising to'} ${betAmount} XLM...`);
+      console.log('[handleRaiseConfirm] betAmount:', betAmount);
+      console.log('[handleRaiseConfirm] myBet:', myBet, 'opponentBet:', opponentBet);
+      
+      // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
+      const amountInStroops = BigInt(Math.round(betAmount * 10000000));
+      
+      console.log('[handleRaiseConfirm] amountInStroops:', amountInStroops);
+      
+      toast.loading(`${myBet === BigInt(0) && opponentBet === BigInt(0) ? 'Betting' : 'Raising to'} ${betAmount.toFixed(2)} XLM...`);
       
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
@@ -390,13 +422,12 @@ export function GameScreen({ onBack }: GameScreenProps) {
       
       const pockerService = new PockerService(POCKER_CONTRACT);
       
-      // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
-      const amountInStroops = BigInt(betAmount * 10000000);
-      
       // Use Bet action if both players have 0 bets, otherwise use Raise
       const action = myBet === BigInt(0) && opponentBet === BigInt(0)
         ? { tag: "Bet" as const, values: [amountInStroops] as const }
         : { tag: "Raise" as const, values: [amountInStroops] as const };
+      
+      console.log('[handleRaiseConfirm] action:', action);
       
       await pockerService.playerAction(
         sessionId,
@@ -406,7 +437,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
       );
       
       toast.dismiss();
-      toast.success(`${action.tag === "Bet" ? 'Bet' : 'Raised to'} ${betAmount} XLM!`);
+      toast.success(`${action.tag === "Bet" ? 'Bet' : 'Raised to'} ${betAmount.toFixed(2)} XLM!`);
       setShowRaiseSlider(false);
       
       // Reload game state
@@ -495,6 +526,7 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const myStack = isPlayer1 ? gameState.player1_stack : gameState.player2_stack;
   const myBet = isPlayer1 ? gameState.player1_bet : gameState.player2_bet;
   const opponentBet = isPlayer1 ? gameState.player2_bet : gameState.player1_bet;
+  const lastRaiseAmount = gameState.last_raise_amount || BigInt(0);
   const potAmount = gameState.pot ? Number(gameState.pot) / 10000000 : 0;
   const myStackXLM = myStack ? Number(myStack) / 10000000 : 0;
   const myBetXLM = myBet ? Number(myBet) / 10000000 : 0;
@@ -504,12 +536,20 @@ export function GameScreen({ onBack }: GameScreenProps) {
   const canCheck = opponentBet === myBet;
   const needsToCall = opponentBet > myBet;
   
-  // Calculate min/max raise amounts
-  // Min raise is 2x opponent's bet (contract requirement)
-  // Max raise is your entire stack
-  const minRaiseStroops = opponentBet > 0 ? opponentBet * BigInt(2) : BigInt(10000000); // Min 1 XLM if no bet
+  // Calculate min/max raise amounts using proper no-limit poker logic
+  // For initial bet: min is 1 XLM (10,000,000 stroops)
+  // For raise: min is opponent_bet + last_raise_amount (or opponent_bet if last_raise_amount is 0)
+  let minRaiseStroops: bigint;
+  if (myBet === BigInt(0) && opponentBet === BigInt(0)) {
+    // No bets yet - initial bet minimum is 1 XLM
+    minRaiseStroops = BigInt(10000000);
+  } else {
+    // There's a bet to raise - min raise is opponent_bet + max(last_raise_amount, opponent_bet)
+    const minRaiseIncrement = lastRaiseAmount > BigInt(0) ? lastRaiseAmount : opponentBet;
+    minRaiseStroops = opponentBet + minRaiseIncrement;
+  }
   const minBet = Number(minRaiseStroops) / 10000000;
-  const maxBet = myStackXLM;
+  const maxBet = myStackXLM + myBetXLM; // Can bet up to stack + current bet
 
   return (
     <>

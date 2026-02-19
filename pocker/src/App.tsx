@@ -8,6 +8,8 @@ import { ModeSelectScreen } from "./pages/ModeSelectScreen";
 import { SettingsScreen } from "./pages/SettingsScreen";
 import { LobbyScreen } from "./pages/LobbyScreen";
 import { GameScreen } from "./pages/GameScreen";
+import { ConfigDebug } from "./components/ConfigDebug";
+
 
 function App() {
   const { isConnected, isConnecting, connect, error } = useWallet();
@@ -99,7 +101,7 @@ function App() {
   return (
     <GameEngineProvider>
       <div className="min-h-screen bg-[url(/background.png)] ">
-        {/* <ConfigDebug /> */}
+        {/* <ConfigDebug />  */}
 
         <Toaster
           position="top-center"
