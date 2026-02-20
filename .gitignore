@@ -4,6 +4,10 @@ test_snapshots/
 target/
 *.wasm
 
+# ZK Circuit artifacts (large binary files)
+*.zkey
+*.ptau
+
 # Deployment info
 deployment.json
 

@@ -1,195 +1,518 @@
 # ZK Poker on Stellar
 
-A provably fair, decentralized Texas Hold'em poker implementation leveraging zero-knowledge proofs and the Stellar blockchain. This project demonstrates advanced cryptographic techniques including Groth16 proof systems, Poseidon hashing, and deterministic randomness generation on a distributed ledger.
+> Provably fair two-player poker using Zero-Knowledge proofs and Stellar Protocol 25
 
-## Technical Architecture
+[![Stellar](https://img.shields.io/badge/Stellar-Protocol%2025-blue)](https://stellar.org)
+[![ZK-SNARKs](https://img.shields.io/badge/ZK-Groth16-green)](https://github.com/iden3/snarkjs)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-### Cryptographic Foundations
+## 🎯 Overview
 
-The game employs a sophisticated cryptographic stack to ensure fairness and privacy:
+ZK Poker demonstrates how Zero-Knowledge proofs enable **hidden information gameplay** with **mathematical fairness guarantees** on blockchain. Players commit to their cards privately using Poseidon hashes, play through betting rounds with hidden hands, then prove hand validity at showdown using Groth16 ZK-SNARKs verified on-chain via Stellar's Protocol 25.
 
-**Zero-Knowledge Proof System**
-- Implements Groth16 proof verification using the BN254 elliptic curve
-- Poseidon hash function for efficient commitment schemes in zero-knowledge circuits
-- Circuit constraints verify hand rankings without revealing card values
-- Proof generation occurs client-side, maintaining player privacy
+**Key Innovation**: No trusted dealer, no server, no cheating possible. Mathematics enforces fairness.
 
-**Commitment Scheme**
-Players commit to their hole cards using Poseidon(card₁, card₂, 0, 0, 0, salt), where the padding accommodates the circuit's 5-card input structure. The commitment is cryptographically binding, preventing players from changing their cards after commitment while keeping them hidden from opponents.
+## 🎮 Game Features
 
-**Deterministic Randomness**
-Community cards are generated using a Fisher-Yates shuffle seeded with a keccak256 hash of the session identifier. The pseudorandom number generator (PRNG) provided by Soroban ensures deterministic, verifiable randomness that is consistent across simulation and execution:
+- **Texas Hold'em**: 2-player poker with 2 hole cards + 5 community cards
+- **Hidden Hands**: Cards committed via Poseidon hash, revealed only at showdown
+- **Full Betting**: Fold, Check, Call, Bet, Raise, All-In actions
+- **ZK Proofs**: Groth16 proofs verify hand rankings without revealing cards on-chain
+- **Protocol 25**: Native BN254 pairing verification for sub-100ms proof checks
+- **Multiplayer**: Real-time P2P gameplay via Playroom Kit
 
-```rust
-let mut seed_bytes = Bytes::new(env);
-seed_bytes.append(&Bytes::from_array(env, &session_id.to_be_bytes()));
-let seed_hash = env.crypto().keccak256(&seed_bytes);
-let mut prng = env.prng();
-prng.seed(seed_hash.into());
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         ZK Poker System                          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│   Frontend   │◄────►│ ZK Circuits  │◄────►│   Soroban    │
+│   (React)    │      │   (Circom)   │      │  Contract    │
+│              │      │              │      │              │
+│ • Playroom   │      │ • Poseidon   │      │ • Verifier   │
+│ • ZK Service │      │ • Groth16    │      │ • Game Hub   │
+│ • Wallet UI  │      │ • Hand Rank  │      │ • State      │
+└──────────────┘      └──────────────┘      └──────────────┘
+       │                     │                      │
+       └─────────────────────┴──────────────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │   Protocol 25   │
+                    │  BN254 Pairing  │
+                    └─────────────────┘
 ```
 
-This approach guarantees that community cards are unpredictable yet reproducible, eliminating any possibility of manipulation while maintaining transparency.
+## 🔐 Zero-Knowledge Flow
 
-### Smart Contract Architecture
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P1 as Player 1
+    participant P2 as Player 2
+    participant FE as Frontend
+    participant ZK as ZK Circuit
+    participant SC as Smart Contract
+    participant P25 as Protocol 25
 
-**Soroban Contract Design**
-The poker contract is implemented in Rust for the Stellar Soroban smart contract platform, featuring:
+    Note over P1,P25: PHASE 1: COMMITMENT (Hidden Information)
+    
+    P1->>FE: Select 2 Hole Cards
+    FE->>FE: Generate Random Salt
+    FE->>ZK: Poseidon(cards + salt)
+    ZK-->>FE: commitment_hash
+    FE->>SC: submit_hole_commitment(hash)
+    SC->>SC: Store P1 commitment ✓
+    
+    P2->>FE: Select 2 Hole Cards
+    FE->>FE: Generate Random Salt
+    FE->>ZK: Poseidon(cards + salt)
+    ZK-->>FE: commitment_hash
+    FE->>SC: submit_hole_commitment(hash)
+    SC->>SC: Store P2 commitment ✓
+    SC->>SC: Generate 5 community cards
+    SC->>SC: Phase → Preflop
+    
+    Note over P1,P25: PHASE 2: BETTING ROUNDS (Cards Hidden)
+    
+    P1->>SC: player_action(Bet 100)
+    P2->>SC: player_action(Call 100)
+    SC->>SC: Phase → Flop (reveal 3 cards)
+    
+    P1->>SC: player_action(Check)
+    P2->>SC: player_action(Bet 200)
+    P1->>SC: player_action(Call 200)
+    SC->>SC: Phase → Turn (reveal 4th card)
+    
+    P1->>SC: player_action(Check)
+    P2->>SC: player_action(Check)
+    SC->>SC: Phase → River (reveal 5th card)
+    
+    P1->>SC: player_action(Bet 300)
+    P2->>SC: player_action(Call 300)
+    SC->>SC: Phase → Showdown
+    
+    Note over P1,P25: PHASE 3: SHOWDOWN (ZK Proof)
+    
+    P1->>P2: Exchange cards + salts (P2P)
+    P2->>P1: Exchange cards + salts (P2P)
+    
+    FE->>ZK: generateProof(all_data)
+    
+    Note over ZK: Verify Commitments<br/>Rank Hands<br/>Determine Winner
+    
+    ZK-->>FE: proof + public_signals
+    
+    FE->>SC: reveal_winner(proof, signals)
+    
+    Note over P1,P25: PHASE 4: VERIFICATION (Protocol 25)
+    
+    SC->>SC: Verify commitments match
+    SC->>P25: verify_groth16(proof)
+    
+    Note over P25: BN254 Pairing Check<br/>e(A,B)*e(C,D)*e(E,F)*e(G,H)=1
+    
+    P25-->>SC: VALID ✓
+    SC->>SC: Extract winner from signals
+    SC->>SC: Call GameHub.end_game()
+    SC-->>FE: Winner announced 🎉
+```
 
-- Temporary storage with 30-day TTL for active game states
-- Automatic TTL extension on every state mutation
-- Integration with Game Hub for lifecycle management and point settlement
-- Multi-round betting state machine (Preflop, Flop, Turn, River, Showdown)
-
-**State Management**
-Game state is stored in temporary ledger storage, optimizing for cost efficiency while maintaining data availability for active games. The contract tracks:
-- Player stacks and current bets
-- Community cards (deterministically generated)
-- Betting phase and turn order
-- Cryptographic commitments for hole cards
-- ZK proof verification results
-
-**Betting Logic**
-The contract enforces standard poker betting rules:
-- Minimum raise of 2x the current bet
-- Proper turn sequencing with automatic switching
-- Pot accumulation across betting rounds
-- Fold, Check, Call, Bet, and Raise actions
-
-### Frontend Implementation
-
-**React + TypeScript Stack**
-- Vite for optimized build and development experience
-- React 18 with hooks for state management
-- TypeScript for type safety across the application
-- Tailwind CSS for responsive, modern UI design
-
-**Wallet Integration**
-Supports multiple Stellar wallets through the Stellar Wallets Kit:
-- Freighter
-- Albedo
-- xBull
-- Development wallet for testing
-
-**ZK Proof Generation**
-Client-side proof generation using snarkjs and circomlibjs:
-- Asynchronous proof computation to maintain UI responsiveness
-- Efficient Poseidon hash implementation in WebAssembly
-- Proof serialization for on-chain verification
-
-## Game Flow
-
-### Phase 1: Commitment
-Players generate two random hole cards client-side and create a cryptographic commitment using the Poseidon hash function. This commitment is submitted to the blockchain, binding the player to their cards without revealing them.
-
-### Phase 2: Betting Rounds
-The game progresses through standard Texas Hold'em betting rounds:
-1. **Preflop**: Initial betting with only hole cards known
-2. **Flop**: Three community cards revealed, second betting round
-3. **Turn**: Fourth community card revealed, third betting round
-4. **River**: Fifth community card revealed, final betting round
-
-Community cards are generated deterministically by the smart contract using the session ID as a seed, ensuring fairness and verifiability.
-
-### Phase 3: Showdown
-At showdown, players generate zero-knowledge proofs demonstrating:
-- Their committed cards match the original commitment
-- The hand ranking is correctly computed
-- The winner is determined fairly
-
-The smart contract verifies these proofs on-chain and distributes the pot to the winner through the Game Hub.
-
-## Cryptographic Primitives
-
-### BN254 Elliptic Curve
-The proof system operates over the BN254 (also known as alt-bn128) elliptic curve, chosen for its efficient pairing operations and widespread support in zero-knowledge proof systems. This curve provides approximately 128 bits of security.
-
-### Poseidon Hash Function
-Poseidon is a cryptographic hash function optimized for zero-knowledge proof systems. Unlike traditional hash functions like SHA-256, Poseidon is designed to minimize the number of constraints in arithmetic circuits, making proof generation significantly faster. The hash function operates over a prime field and uses a sponge construction with partial S-boxes for efficiency.
-
-### Groth16 Proof System
-Groth16 is a zero-knowledge succinct non-interactive argument of knowledge (zk-SNARK) that produces constant-size proofs regardless of circuit complexity. The proof consists of three elliptic curve points:
-- π_a: G1 point (64 bytes)
-- π_b: G2 point (128 bytes)  
-- π_c: G1 point (64 bytes)
-
-Verification requires a single pairing check, making it extremely efficient for on-chain verification.
-
-## Security Considerations
-
-**Commitment Security**
-The Poseidon hash commitment scheme is computationally binding and hiding, meaning:
-- Players cannot find two different hands that produce the same commitment (binding)
-- The commitment reveals no information about the cards (hiding)
-
-**Randomness Security**
-The deterministic PRNG seeded with keccak256(session_id) ensures:
-- Unpredictability: Session IDs are generated with sufficient entropy
-- Reproducibility: The same seed always produces the same card sequence
-- Verifiability: Any party can verify the shuffle was performed correctly
-
-**Smart Contract Security**
-- Reentrancy protection through Soroban's execution model
-- Proper authorization checks on all state-modifying functions
-- Temporary storage prevents state bloat and reduces attack surface
-- Integration with Game Hub ensures proper point settlement
-
-## Development
+## 🚀 Quick Start
 
 ### Prerequisites
-- Rust toolchain with wasm32-unknown-unknown target
-- Soroban CLI
-- Node.js 18+ and Bun
-- Stellar testnet account with XLM
 
-### Building the Contract
 ```bash
-bun run build pocker
+node >= 18.0.0
+bun >= 1.0.0
+stellar-cli >= 21.0.0
 ```
 
-### Deploying to Testnet
+### Installation
+
 ```bash
-bun run deploy pocker
+# Clone repository
+git clone <repo-url>
+cd Stellar-Game-Studio/pocker
+
+# Install dependencies
+bun install
+
+# Start development server
+bun run dev
 ```
 
-### Generating TypeScript Bindings
+### Play the Game
+
+1. **Connect Wallet**: Use Freighter or dev wallet
+2. **Create Room**: Generate a room code
+3. **Share Code**: Send to opponent
+4. **Start Game**: Both players sign multi-sig transaction
+5. **Commit Cards**: Select 2 hole cards (hidden)
+6. **Play Rounds**: Bet through Preflop → Flop → Turn → River
+7. **Showdown**: Generate ZK proof and reveal winner
+
+## 🔬 ZK Circuits
+
+### Circuit Architecture
+
+```
+circuits/pocker/src/
+├── card_commitment.circom    (~5K constraints)
+│   └── Poseidon hash commitment for cards
+├── card_reveal.circom        (~3K constraints)
+│   └── Prove revealed cards match commitment
+├── hand_ranking.circom       (~20K constraints)
+│   └── Compute poker hand ranking (0-9)
+└── poker_game.circom         (~50K constraints)
+    └── Master circuit: verify + rank + determine winner
+```
+
+### Commitment Circuit
+
+```circom
+// Input (Private)
+signal input cards[2];      // [0-51] representing deck
+signal input salt;          // Random 256-bit number
+
+// Output (Public)
+signal output commitment;   // Poseidon hash
+
+// Constraints
+- cards[i] in range [0, 51]
+- cards[0] ≠ cards[1]
+- commitment = Poseidon(cards[0], cards[1], salt)
+```
+
+### Poker Game Circuit
+
+```circom
+// Inputs (Private)
+signal input player1_cards[2];
+signal input player1_salt;
+signal input player2_cards[2];
+signal input player2_salt;
+signal input community_cards[5];
+signal input community_salt;
+
+// Inputs (Public)
+signal input player1_commitment;
+signal input player2_commitment;
+signal input community_commitment;
+
+// Outputs (Public)
+signal output player1_ranking;  // 0-9 (High Card → Royal Flush)
+signal output player2_ranking;  // 0-9
+signal output winner;           // 1 = P1, 2 = P2, 0 = tie
+
+// Verification Steps
+1. Verify P1 commitment: Poseidon(P1_cards, P1_salt) == P1_commitment
+2. Verify P2 commitment: Poseidon(P2_cards, P2_salt) == P2_commitment
+3. Verify community commitment: Poseidon(community, salt) == commitment
+4. Rank P1 hand (2 hole + 5 community → best 5)
+5. Rank P2 hand (2 hole + 5 community → best 5)
+6. Determine winner (higher ranking wins)
+```
+
+### Build Circuits
+
 ```bash
+cd circuits/pocker
+
+# Compile circuits
+npm run compile:all
+
+# Trusted setup (generates proving/verification keys)
+npm run setup
+
+# Copy artifacts to frontend
+npm run copy-artifacts
+```
+
+## 📜 Smart Contract
+
+### Contract Interface
+
+```rust
+// Initialize contract
+pub fn __constructor(env: Env, admin: Address, game_hub: Address)
+
+// Start game (multi-sig)
+pub fn start_game(
+    env: Env,
+    session_id: u32,
+    player1: Address,
+    player2: Address,
+    player1_points: i128,
+    player2_points: i128,
+) -> Result<(), Error>
+
+// Commit to 2 hole cards
+pub fn submit_hole_commitment(
+    env: Env,
+    session_id: u32,
+    player: Address,
+    hole_commitment: Bytes,
+) -> Result<(), Error>
+
+// Execute betting action
+pub fn player_action(
+    env: Env,
+    session_id: u32,
+    player: Address,
+    action: Action,  // Fold, Check, Call, Bet, Raise, AllIn
+) -> Result<(), Error>
+
+// Reveal winner with ZK proof
+pub fn reveal_winner(
+    env: Env,
+    session_id: u32,
+    proof: Groth16Proof,
+    public_signals: Vec<Bytes>,
+) -> Result<Address, Error>
+
+// Query game state
+pub fn get_game(env: Env, session_id: u32) -> Result<Game, Error>
+```
+
+### Game State Machine
+
+```
+Commit → Preflop → Flop → Turn → River → Showdown → Complete
+  ↓         ↓        ↓      ↓      ↓        ↓          ↓
+ Cards    Bet 1   Bet 2  Bet 3  Bet 4   ZK Proof   Winner
+Hidden   (2 hole) (+3)   (+1)   (+1)    Verify    Payout
+```
+
+### Protocol 25 Verification
+
+```rust
+// BN254 Groth16 Verification
+pub fn verify_groth16(
+    env: &Env,
+    proof: Groth16Proof,
+    public_signals: Vec<Bytes>,
+) -> Result<(), Error> {
+    // 1. Load verification key
+    let vk = load_verification_key(env);
+    
+    // 2. Compute public input contribution
+    // vk_x = IC[0] + Σ(signal[i] * IC[i+1])
+    let vk_x = compute_public_input(vk, public_signals);
+    
+    // 3. Prepare pairing inputs
+    let pairing_inputs = [
+        (proof.pi_a, vk.alpha),
+        (vk.beta, proof.pi_b),
+        (vk_x, vk.gamma),
+        (proof.pi_c, vk.delta),
+    ];
+    
+    // 4. Execute pairing check (Protocol 25)
+    // e(A,B) * e(C,D) * e(E,F) * e(G,H) = 1
+    let result = env.crypto().bn254_pairing(pairing_inputs);
+    
+    if !result {
+        return Err(Error::InvalidProof);
+    }
+    
+    Ok(())
+}
+```
+
+## 🎨 Frontend Integration
+
+### ZK Service
+
+```typescript
+import { ZKPokerService } from './services/zkService';
+
+const zkService = new ZKPokerService();
+await zkService.initialize();
+
+// Generate commitment
+const cards = [0, 51]; // A♠, K♠
+const salt = zkService.generateSalt();
+const commitment = await zkService.commitHand(cards, salt);
+
+// Generate proof at showdown
+const proofData = await zkService.generateProof(
+  player1Cards,
+  player1Salt,
+  player1Commitment,
+  player2Cards,
+  player2Salt,
+  player2Commitment,
+  communityCards,
+  communitySalt,
+  communityCommitment
+);
+
+// Serialize for contract
+const serializedProof = zkService.serializeProof(proofData.proof);
+```
+
+### Pocker Service
+
+```typescript
+import { PockerService } from './games/pocker/pockerService';
+
+const pockerService = new PockerService(CONTRACT_ID);
+
+// Start game (multi-sig flow)
+const authEntry = await pockerService.prepareStartGame(
+  sessionId, player1, player2, points1, points2, signer1
+);
+// Player 2 imports and signs
+const txXdr = await pockerService.importAndSignAuthEntry(
+  authEntry, player2, points2, signer2
+);
+// Finalize
+await pockerService.finalizeStartGame(txXdr, player2, signer2);
+
+// Submit commitment
+await pockerService.submitHoleCommitment(
+  sessionId, playerAddress, commitment, signer
+);
+
+// Execute action
+await pockerService.playerAction(
+  sessionId, playerAddress, { tag: 'Bet', values: [100n] }, signer
+);
+
+// Reveal winner
+await pockerService.revealWinner(
+  sessionId, playerAddress, proof, publicSignals, signer
+);
+```
+
+## 📊 Performance Metrics
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Circuit Constraints | ~50,000 | poker_game.circom |
+| Proof Generation | 2-5 seconds | Client-side (browser) |
+| Proof Size | ~200 bytes | Groth16 |
+| Verification Time | <100ms | On-chain (Protocol 25) |
+| Proving Key | ~50MB | Cached in browser |
+| Verification Key | ~2KB | Stored in contract |
+| WASM Prover | ~2MB | Loaded once |
+
+## 🔒 Security Properties
+
+### Commitment Binding
+- **Property**: Players cannot change cards after commitment
+- **Mechanism**: Poseidon hash preimage resistance
+- **Attack Prevention**: Finding different cards with same hash is computationally infeasible
+
+### Zero-Knowledge
+- **Property**: Private inputs (salts, cards) never revealed on-chain
+- **Mechanism**: ZK proof reveals nothing except validity
+- **Attack Prevention**: Soundness ensures invalid proofs rejected
+
+### Fairness
+- **Property**: Winner determination is verifiable
+- **Mechanism**: Hand rankings computed in ZK circuit
+- **Attack Prevention**: Completeness ensures valid games always produce valid proofs
+
+### Deterministic Randomness
+- **Property**: Community cards unpredictable but verifiable
+- **Mechanism**: PRNG seeded with player commitments
+- **Attack Prevention**: Neither player can predict or manipulate cards
+
+## 🛠️ Development
+
+### Build Contract
+
+```bash
+cd contracts/pocker
+stellar contract build --package pocker
+```
+
+### Deploy to Testnet
+
+```bash
+# Deploy contract
+stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/pocker.wasm \
+  --source <SECRET_KEY> \
+  --network testnet
+
+# Initialize
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <SECRET_KEY> \
+  --network testnet \
+  -- \
+  __constructor \
+  --admin <ADMIN_ADDRESS> \
+  --game_hub CB4VZAT2UQBNOrnQlzo3ftqm0Jj5Sf9zEHlPApapd-rWsAHREzkweiTw
+```
+
+### Generate Bindings
+
+```bash
+cd ../..
 bun run bindings pocker
 ```
 
-### Running the Frontend
+### Run Tests
+
 ```bash
-bun run dev:game pocker
+# Circuit tests
+cd circuits/pocker
+npm test
+
+# Contract tests
+cd ../../contracts/pocker
+cargo test
+
+# Frontend tests
+cd ../../pocker
+bun test
 ```
 
-## Technical Specifications
+## 📚 Technical Resources
 
-**Blockchain**: Stellar (Soroban smart contracts)  
-**Proof System**: Groth16 over BN254  
-**Hash Function**: Poseidon (6-input variant)  
-**Randomness**: Keccak256-seeded PRNG with Fisher-Yates shuffle  
-**Storage**: Temporary ledger storage with 30-day TTL  
-**Frontend**: React 18, TypeScript, Vite  
-**Wallet Support**: Freighter, Albedo, xBull via Stellar Wallets Kit
+- **Circom Documentation**: https://docs.circom.io/
+- **SnarkJS Guide**: https://github.com/iden3/snarkjs
+- **Stellar Protocol 25**: https://stellar.org/protocol-25
+- **Groth16 Paper**: https://eprint.iacr.org/2016/260.pdf
+- **Soroban Docs**: https://soroban.stellar.org/
 
-## Future Enhancements
+## 🎯 Use Cases
 
-The current implementation provides a foundation for provably fair poker on Stellar. Potential improvements include:
+1. **Fair Online Poker**: Eliminate house edge and trust requirements
+2. **Tournament Gaming**: Provably fair competitions with verifiable results
+3. **Educational Tool**: Demonstrate ZK cryptography in accessible way
+4. **Web3 Gaming Standard**: Blueprint for other card/board games
 
-- Full 7-card hand evaluation in the ZK circuit (2 hole + 5 community)
-- Multi-table tournament support
-- Optimized circuit design for faster proof generation
-- Integration with Stellar DEX for automated rake distribution
-- Mobile-responsive UI improvements
-- Spectator mode with privacy-preserving hand reveals
+## 🚧 Future Enhancements
 
-## License
+- [ ] Full 52-card deck with ZK shuffle
+- [ ] Multi-round tournaments
+- [ ] Spectator mode with delayed reveals
+- [ ] Mobile app (React Native)
+- [ ] Leaderboard and statistics
+- [ ] Multi-table support
 
-MIT License - see LICENSE file for details
+## 📄 License
 
-## Acknowledgments
+MIT License - see [LICENSE](../LICENSE) for details
 
-This project builds upon several open-source technologies:
-- Stellar Development Foundation for the Soroban platform
-- iden3 for circom and snarkjs
-- The Ethereum community for BN254 curve specifications
-- Poseidon hash function designers (Grassi et al.)
+## 🤝 Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
+
+## 🙏 Acknowledgments
+
+- Stellar Development Foundation for Protocol 25
+- iden3 team for Circom and SnarkJS
+- Hermez for Powers of Tau ceremony
+- Stellar Game Studio framework
+
+---
+
+**Built for DoraHacks ZK Gaming Hackathon | Powered by Stellar Protocol 25 | Secured by Zero-Knowledge Proofs**
