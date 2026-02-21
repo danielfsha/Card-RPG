@@ -6,6 +6,7 @@ import { Map } from "./map";
 import { useGameEngine } from "../hooks/useGameEngine";
 import { Bullet } from "./Bullet";
 import { BulletHit } from "./BulletHit";
+import { isHost } from "playroomkit";
 
 export interface ExperienceProps {}
 
@@ -14,13 +15,18 @@ const Experience = (_props: ExperienceProps) => {
     players,
     bullets,
     hits,
-    gameStarted,
+    networkBullets,
+    networkHits,
     myPlayer,
     onFire,
     onHit,
     onHitEnded,
     onKilled,
   } = useGameEngine();
+
+  console.log("[Experience] Rendering with players:", players.length);
+  console.log("[Experience] Players:", players.map(p => ({ id: p.state.id, character: p.state.getState?.("character") })));
+  console.log("[Experience] My player ID:", myPlayer?.id);
 
   const keyboardMap = [
     { name: "forward", keys: ["ArrowUp", "KeyW"] },
@@ -32,19 +38,15 @@ const Experience = (_props: ExperienceProps) => {
     { name: "fire", keys: ["Mouse0"] }, // Left mouse button for firing
   ];
 
-  if (!gameStarted) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-gradient-to-b from-blue-900 to-purple-900">
-        <div className="text-white text-2xl">Loading game...</div>
-      </div>
-    );
-  }
+  // Use host's bullets/hits or network-synced versions
+  const activeBullets = isHost() ? bullets : networkBullets;
+  const activeHits = isHost() ? hits : networkHits;
 
   return (
-    <>
+    <div className="w-screen h-screen overflow-hidden">
       <KeyboardControls map={keyboardMap}>
         <Canvas
-          className="w-screen h-screen overflow-hidden"
+          className="w-full h-full"
           shadows
           camera={{ position: [0, 5, -8], fov: 50 }}
         >
@@ -65,26 +67,37 @@ const Experience = (_props: ExperienceProps) => {
               attach={"shadow-camera"}
             />
           </directionalLight>
-          <Physics>
-            <Map />
-            {players.map(({ state, joystick }) => (
-              <CharacterController
-                key={state.id}
-                controls={joystick}
-                userPlayer={state.id === myPlayer?.id}
-                playerState={state}
-                onFire={onFire}
-                onKilled={onKilled}
-              />
-            ))}
-            {bullets.map((bullet) => (
+          <Physics key="physics-world">
+            <Map key="game-map" />
+            {players.length === 0 && (
+              <group>
+                <mesh position={[0, 2, 0]}>
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshStandardMaterial color="red" />
+                </mesh>
+              </group>
+            )}
+            {players.map(({ state, joystick }) => {
+              console.log("[Experience] Rendering character for player:", state.id, "userPlayer:", state.id === myPlayer?.id);
+              return (
+                <CharacterController
+                  key={state.id}
+                  controls={joystick}
+                  userPlayer={state.id === myPlayer?.id}
+                  playerState={state}
+                  onFire={onFire}
+                  onKilled={onKilled}
+                />
+              );
+            })}
+            {activeBullets.map((bullet) => (
               <Bullet
                 key={bullet.id}
                 {...bullet}
                 onHit={(position) => onHit(bullet.id, position)}
               />
             ))}
-            {hits.map((hit) => (
+            {activeHits.map((hit) => (
               <BulletHit
                 key={hit.id}
                 {...hit}
@@ -94,7 +107,7 @@ const Experience = (_props: ExperienceProps) => {
           </Physics>
         </Canvas>
       </KeyboardControls>
-    </>
+    </div>
   );
 };
 

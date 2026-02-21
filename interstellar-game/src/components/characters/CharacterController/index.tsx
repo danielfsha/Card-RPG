@@ -64,19 +64,21 @@ export const CharacterController = forwardRef<any, CharacterControllerProps>(
   useFrame(({ camera }) => {
     if (!rb.current) return;
 
-    // Camera follow
-    const rbPosition = vec3(rb.current.translation());
-    // Look at a point higher on the character (add offset to Y)
-    const lookAtTarget = new Vector3(rbPosition.x, rbPosition.y + 1.5, rbPosition.z);
-    
-    if (!cameraLookAt.current) {
-      cameraLookAt.current = lookAtTarget;
+    // Camera follow - ONLY for the user's own character
+    if (userPlayer) {
+      const rbPosition = vec3(rb.current.translation());
+      // Look at a point higher on the character (add offset to Y)
+      const lookAtTarget = new Vector3(rbPosition.x, rbPosition.y + 1.5, rbPosition.z);
+      
+      if (!cameraLookAt.current) {
+        cameraLookAt.current = lookAtTarget;
+      }
+      cameraLookAt.current.lerp(lookAtTarget, 0.05);
+      camera.lookAt(cameraLookAt.current);
+      const worldPos = rbPosition;
+      cameraPosition.current.getWorldPosition(worldPos);
+      camera.position.lerp(worldPos, 0.05);
     }
-    cameraLookAt.current.lerp(lookAtTarget, 0.05);
-    camera.lookAt(cameraLookAt.current);
-    const worldPos = rbPosition;
-    cameraPosition.current.getWorldPosition(worldPos);
-    camera.position.lerp(worldPos, 0.05);
 
     const rotVel = {
       x: 0,

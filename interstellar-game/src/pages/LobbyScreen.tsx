@@ -16,6 +16,7 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
     startGame: initGameSession,
     setP1AuthEntryXDR,
     p1AuthEntryXDR,
+    sessionId,
   } = useGameEngine();
   const players = usePlayersList(true);
   const me = myPlayer();
@@ -39,17 +40,26 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
   useEffect(() => {
     if (!host && p1AuthEntryXDR && !isStarting && !hasImported) {
       console.log("[Guest] Received auth entry from host, auto-importing...");
+      console.log("[Guest] Current session ID from Playroom:", sessionId);
+      
+      if (!sessionId || sessionId === 0) {
+        console.error("[Guest] ❌ Session ID not set! Cannot proceed.");
+        toast.error("Session ID not received from host. Please try again.");
+        return;
+      }
+      
       setHasImported(true);
       // Cancel any countdown - we need to wait for transaction
       setCountdown(null);
       handleGuestImportAndFinalize();
     }
-  }, [host, p1AuthEntryXDR, isStarting, hasImported]);
+  }, [host, p1AuthEntryXDR, isStarting, hasImported, sessionId]);
 
   const handleGuestImportAndFinalize = async () => {
     setIsStarting(true);
     try {
       console.log("[Guest] Starting import and finalize process...");
+      console.log("[Guest] Using session ID:", sessionId);
 
       const { InterstellarService } = await import("../games/interstellar/interstellarService");
       const { INTERSTELLAR_CONTRACT, NETWORK } = await import("../utils/constants");
@@ -59,9 +69,20 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
 
       // Parse auth entry to get game params
       console.log("[Guest] Parsing auth entry...");
-      const gameParams = InterstellarService.parseAuthEntry(p1AuthEntryXDR);
+      const gameParams = interstellarService.parseAuthEntry(p1AuthEntryXDR);
 
       console.log("[Guest] Parsed game params:", gameParams);
+      console.log("[Guest] Session ID from auth entry:", gameParams.sessionId);
+      console.log("[Guest] Session ID from Playroom state:", sessionId);
+      
+      // Verify session IDs match
+      if (gameParams.sessionId !== sessionId) {
+        console.warn("[Guest] ⚠️ Session ID mismatch! Auth entry:", gameParams.sessionId, "Playroom:", sessionId);
+        toast.error("Session ID mismatch. Please try again.");
+        setIsStarting(false);
+        setHasImported(false);
+        return;
+      }
 
       // Ensure Player 2 (guest) is funded on testnet
       if (NETWORK === "testnet" && publicKey) {
@@ -390,6 +411,11 @@ export function LobbyScreen({ onStartGame }: LobbyScreenProps) {
                 <ClipboardCopy />
             </GlossyButton>
           </div>
+          {sessionId > 0 && (
+            <div className="text-white/50 text-xs mt-2 text-center font-mono">
+              Session ID: {sessionId}
+            </div>
+          )}
         </div>
 
         {/* Players List */}

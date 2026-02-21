@@ -11,11 +11,11 @@ circuits/pocker/
 │   ├── card_reveal.circom        # Verify revealed cards match commitment
 │   ├── hand_ranking.circom       # Compute poker hand ranking
 │   ├── poker_game.circom         # Master circuit (main)
-│   ├── betting.circom            # Betting logic (future)
-│   ├── deal.circom               # Card dealing (future)
-│   ├── reveal.circom             # Reveal logic (future)
-│   ├── shuffle.circom            # Deck shuffling (future)
-│   └── vrf.circom                # Verifiable random function (future)
+│   ├── betting.circom            # Betting logic 
+│   ├── deal.circom               # Card dealing 
+│   ├── reveal.circom             # Reveal logic 
+│   ├── shuffle.circom            # Deck shuffling 
+│   └── vrf.circom                # Verifiable random function 
 │
 ├── build/                        # Compiled circuit artifacts
 │   ├── poker_game.r1cs           # Constraint system
