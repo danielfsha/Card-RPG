@@ -199,7 +199,7 @@ const Game = () => {
     const isFaceDown = cardWithPosition.position === POSITION.DEFENSE_DOWN;
     // For hand cards, use the fan effect with Framer Motion
     if (isHand) {
-      const cardId = card.id || `${card.name}-${index}`;
+      const cardId = card.id ? `${myId}-hand-${card.id}-${index}` : `${myId}-hand-${card.name}-${index}`;
       const imagePath = card.image ? `/images/${card.image}.png` : '/images/back.png';
       
       if (!card.image) {
@@ -247,7 +247,8 @@ const Game = () => {
     }
 
     // For field cards - animated with layoutId
-    const cardId = card.id || `${card.name}-field-${index}`;
+    const playerId = isMine ? myId : opponentId || 'opponent';
+    const cardId = card.id ? `${playerId}-field-${card.id}-${index}` : `${playerId}-field-${card.name}-${index}`;
     
     // Show back of card for defense position monsters (both face-down and face-up defense)
     const shouldShowBack = isDefense && !isMine;
