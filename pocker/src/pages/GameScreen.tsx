@@ -232,11 +232,20 @@ export function GameScreen({ onBack }: GameScreenProps) {
       toast.success("Proof generated! Submitting to contract...");
       
       const serializedProof = zkService.serializeProof(proofData.proof);
+      
+      // Convert public signals to buffers
+      // Circuit outputs: [player1_commitment, player2_commitment, player1_ranking, player2_ranking, winner]
+      // Contract expects: [player1_commitment, player2_commitment, community_commitment, player1_ranking, player2_ranking, winner]
+      // Insert dummy community commitment at index 2
       const publicSignalsBuffers = proofData.publicSignals.map((signal: string) => {
         const bn = BigInt(signal);
         const hex = bn.toString(16).padStart(64, '0');
         return Buffer.from(hex, 'hex');
       });
+      
+      // Insert dummy community commitment (all zeros) at index 2
+      const dummyCommunityCommitment = Buffer.alloc(32, 0);
+      publicSignalsBuffers.splice(2, 0, dummyCommunityCommitment);
       
       const { PockerService } = await import("../games/pocker/pockerService");
       const { POCKER_CONTRACT } = await import("../utils/constants");
