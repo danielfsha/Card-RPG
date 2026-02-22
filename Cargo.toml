@@ -9,6 +9,7 @@ members = [
   "contracts/card-rpg",
   "contracts/pocker",
   "contracts/interstellar",
+  "contracts/chess",
 ]
 
 [workspace.dependencies]

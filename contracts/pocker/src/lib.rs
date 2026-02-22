@@ -232,6 +232,9 @@ impl PockerContract {
 
         // Create game in Commit phase
         // Players start with their full buy-in as stack
+        // For 5-card poker (no community cards), set a dummy community commitment
+        let dummy_community_commitment = Bytes::from_slice(&env, &[0u8; 32]);
+        
         let game = Game {
             player1: player1.clone(),
             player2: player2.clone(),
@@ -245,7 +248,7 @@ impl PockerContract {
             player1_hole_commitment: None,
             player2_hole_commitment: None,
             community_cards: Vec::new(&env),  // Will be generated when both players commit
-            community_commitment: None,
+            community_commitment: Some(dummy_community_commitment),  // Dummy for 5-card poker
             community_revealed: 0,
             current_actor: 0,  // Player 1 starts
             last_action: Action::None,
@@ -314,12 +317,9 @@ impl PockerContract {
             return Err(Error::NotPlayer);
         }
 
-        // If both players have committed, move to Preflop betting phase
+        // If both players have committed, move directly to Showdown (5-card poker, no community cards)
         if game.player1_hole_commitment.is_some() && game.player2_hole_commitment.is_some() {
-            // Generate deterministic community cards using PRNG
-            game.community_cards = Self::generate_community_cards(&env, session_id);
-            game.phase = Phase::Preflop;
-            game.current_actor = 0;  // Player 1 acts first preflop
+            game.phase = Phase::Showdown;
         }
 
         // Store updated game in temporary storage
